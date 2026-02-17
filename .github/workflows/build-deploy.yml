@@ -35,6 +35,15 @@ jobs:
         run: |
           echo "Registry: ${{ env.IMAGE_REGISTRY }}"
           echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "ACR Username: ${{ vars.ACR_USERNAME }}"
+          echo "AKS Client ID: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}"
+          echo "AKS Tenant ID: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}"
+          echo "AKS Subscription: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}"
+          echo "AKS Resource Group: ${{ vars.AKS_RG_NAME }}"
+          echo "AKS Cluster Name: ${{ vars.AKS_CLUSTER_NAME }}"
+          echo "ACR Password: ${{ secrets.ACR_PASSWORD }}"
+          echo "AKS Client Secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}"
+          echo "Namespace: ${{ env.NAMESPACE }}"
 
       - name: Log in to Azure Container Registry
         uses: azure/docker-login@v1
