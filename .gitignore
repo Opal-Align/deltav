@@ -1,0 +1,17 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Java / Maven
+api/target/
+*.class
+*.jar
+
+# Azure Functions local
+api/local.settings.json
+api/.azurite/
+
+# OS
+.DS_Store
+Thumbs.db

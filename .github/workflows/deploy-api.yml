@@ -1,0 +1,62 @@
+name: Build & Deploy DeltaV API
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  JAVA_VERSION: '21'
+  BASE_APP_NAME: deltav-api
+  FUNCTION_APP_NAME: deltav-api-${{ github.event.inputs.environment }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print Deploy Info
+        run: |
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Function App: ${{ env.FUNCTION_APP_NAME }}"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Build with Maven
+        working-directory: api
+        run: |
+          mvn clean package azure-functions:package \
+            -DfunctionAppName=${{ env.FUNCTION_APP_NAME }} \
+            --batch-mode --no-transfer-progress
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
+          tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
+          client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
+          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v2
+        with:
+          app-name: ${{ env.FUNCTION_APP_NAME }}
+          package: api/target/azure-functions/${{ env.FUNCTION_APP_NAME }}

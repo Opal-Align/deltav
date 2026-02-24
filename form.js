@@ -168,17 +168,69 @@
     return valid;
   }
 
+  // Set this to your Azure Functions URL in production, e.g. "https://deltav-api.azurewebsites.net"
+  var API_BASE = window.DELTAV_API_URL || "";
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     if (!validate()) return;
 
-    var next = nextInput.value.trim();
-    if (next && isAllowedRedirect(next)) {
-      window.location.href = next;
-    } else if (next) {
-      alert("Redirect is not allowed to that URL. Please use a valid link.");
-    } else {
-      alert("Registration received. In production, data would be sent to your server.");
+    var registrantValue = form.querySelector('input[name="registrant"]:checked').value;
+    var payload = {
+      registrant: registrantValue,
+      first_name: document.getElementById("first-name").value.trim(),
+      last_name: document.getElementById("last-name").value.trim(),
+      dob: document.getElementById("dob").value,
+      phone: document.getElementById("phone").value.trim(),
+      email: document.getElementById("email").value.trim(),
+      confirm_accurate: document.getElementById("confirm-accurate").checked,
+      agree_privacy: document.getElementById("agree-privacy").checked,
+      redirect_url: nextInput.value.trim()
+    };
+
+    if (registrantValue === "another") {
+      payload.relationship = relationshipSelect.value;
+      if (relationshipSelect.value === "other") {
+        payload.relationship_other = relationshipOtherInput.value.trim();
+      }
     }
+
+    var submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting...";
+
+    fetch(API_BASE + "/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { status: res.status, data: data };
+        });
+      })
+      .then(function (result) {
+        if (result.status === 201) {
+          var redirect = result.data.redirect_url;
+          if (redirect && isAllowedRedirect(redirect)) {
+            window.location.href = redirect;
+          } else {
+            alert("Registration submitted successfully!");
+            form.reset();
+            toggleFromRegistrant();
+          }
+        } else if (result.status === 400 && result.data.errors) {
+          alert("Validation errors:\n" + result.data.errors.join("\n"));
+        } else {
+          alert("Something went wrong. Please try again.");
+        }
+      })
+      .catch(function () {
+        alert("Network error. Please check your connection and try again.");
+      })
+      .finally(function () {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Continue";
+      });
   });
 })();
