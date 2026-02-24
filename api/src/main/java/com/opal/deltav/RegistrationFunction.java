@@ -9,6 +9,10 @@ import com.azure.data.tables.models.TableEntity;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,9 +23,70 @@ public class RegistrationFunction {
 
     private static final Gson gson = new Gson();
     private static final String TABLE_NAME = "PatientRegistrations";
+    private static final long TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+    // --- GET /api/form — serve HTML with CSRF token ---
+
+    @FunctionName("form")
+    public HttpResponseMessage serveForm(
+            @HttpTrigger(
+                    name = "req",
+                    methods = {HttpMethod.GET},
+                    authLevel = AuthorizationLevel.ANONYMOUS,
+                    route = "form"
+            ) HttpRequestMessage<Optional<String>> request,
+            final ExecutionContext context) {
+
+        Logger logger = context.getLogger();
+
+        try {
+            String html = loadResource("static/index.html");
+            if (html == null) {
+                return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Form template not found")
+                        .build();
+            }
+
+            String csrfToken = generateCsrfToken();
+            html = html.replace("{{CSRF_TOKEN}}", csrfToken);
+
+            // Inline CSS and JS so the form is self-contained
+            String css = loadResource("static/styles.css");
+            if (css != null) {
+                html = html.replace(
+                        "<link rel=\"stylesheet\" href=\"styles.css\" />",
+                        "<style>" + css + "</style>"
+                );
+            }
+
+            String js = loadResource("static/form.js");
+            if (js != null) {
+                html = html.replace(
+                        "<script src=\"form.js\"></script>",
+                        "<script>" + js + "</script>"
+                );
+            }
+
+            logger.info("Serving form with CSRF token");
+
+            return request.createResponseBuilder(HttpStatus.OK)
+                    .body(html)
+                    .header("Content-Type", "text/html; charset=utf-8")
+                    .header("Cache-Control", "no-store")
+                    .build();
+
+        } catch (Exception e) {
+            logger.severe("Error serving form: " + e.getMessage());
+            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Error loading form")
+                    .build();
+        }
+    }
+
+    // --- POST /api/register — validate CSRF + store data ---
 
     @FunctionName("register")
-    public HttpResponseMessage run(
+    public HttpResponseMessage register(
             @HttpTrigger(
                     name = "req",
                     methods = {HttpMethod.POST},
@@ -31,6 +96,13 @@ public class RegistrationFunction {
             final ExecutionContext context) {
 
         Logger logger = context.getLogger();
+
+        // Validate CSRF token from header
+        String csrfToken = request.getHeaders().get("x-csrf-token");
+        if (csrfToken == null || !validateCsrfToken(csrfToken)) {
+            return jsonResponse(request, HttpStatus.FORBIDDEN,
+                    Map.of("error", "Invalid or expired CSRF token"));
+        }
 
         // Parse JSON body
         String body = request.getBody().orElse(null);
@@ -91,6 +163,59 @@ public class RegistrationFunction {
             logger.severe("Table Storage error: " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
+        }
+    }
+
+    // --- CSRF token: timestamp + HMAC signature ---
+
+    private String generateCsrfToken() {
+        long timestamp = System.currentTimeMillis();
+        String signature = hmacSign(String.valueOf(timestamp));
+        return timestamp + "." + signature;
+    }
+
+    private boolean validateCsrfToken(String token) {
+        try {
+            String[] parts = token.split("\\.", 2);
+            if (parts.length != 2) return false;
+
+            long timestamp = Long.parseLong(parts[0]);
+            String signature = parts[1];
+
+            // Check expiry
+            if (System.currentTimeMillis() - timestamp > TOKEN_TTL_MS) return false;
+
+            // Verify signature
+            String expected = hmacSign(String.valueOf(timestamp));
+            return expected.equals(signature);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String hmacSign(String data) {
+        try {
+            String secret = System.getenv("CSRF_SECRET");
+            if (secret == null || secret.isBlank()) {
+                secret = "deltav-default-csrf-secret-change-me";
+            }
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("HMAC signing failed", e);
+        }
+    }
+
+    // --- Helpers ---
+
+    private String loadResource(String path) {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(path)) {
+            if (is == null) return null;
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
         }
     }
 
