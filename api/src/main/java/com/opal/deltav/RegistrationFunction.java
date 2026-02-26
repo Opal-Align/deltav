@@ -6,6 +6,7 @@ import com.azure.data.tables.TableClient;
 import com.azure.data.tables.TableServiceClient;
 import com.azure.data.tables.TableServiceClientBuilder;
 import com.azure.data.tables.models.TableEntity;
+import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -19,6 +20,43 @@ public class RegistrationFunction {
 
     private static final Gson gson = new Gson();
     private static final String TABLE_NAME = "PatientRegistrations";
+    private static volatile TableClient tableClient;
+    private static final Object lock = new Object();
+
+    private static TableClient getTableClient(Logger logger) {
+        if (tableClient == null) {
+            synchronized (lock) {
+                if (tableClient == null) {
+                    String storageAccountName = System.getenv("STORAGE_ACCOUNT_NAME");
+                    String connStr = System.getenv("AzureWebJobsStorage");
+
+                    TableServiceClient serviceClient;
+                    if (storageAccountName != null && !storageAccountName.isBlank()) {
+                        // Use managed identity / service principal via DefaultAzureCredential
+                        logger.info("Initializing Table Storage client with managed identity");
+                        String endpoint = "https://" + storageAccountName + ".table.core.windows.net";
+                        serviceClient = new TableServiceClientBuilder()
+                                .endpoint(endpoint)
+                                .credential(new DefaultAzureCredentialBuilder().build())
+                                .buildClient();
+                    } else if (connStr != null && !connStr.isBlank()) {
+                        // Fallback to connection string
+                        logger.info("Initializing Table Storage client with connection string");
+                        serviceClient = new TableServiceClientBuilder()
+                                .connectionString(connStr)
+                                .buildClient();
+                    } else {
+                        throw new IllegalStateException("Neither STORAGE_ACCOUNT_NAME nor AzureWebJobsStorage is configured");
+                    }
+
+                    serviceClient.createTableIfNotExists(TABLE_NAME);
+                    tableClient = serviceClient.getTableClient(TABLE_NAME);
+                    logger.info("Table Storage client initialized successfully");
+                }
+            }
+        }
+        return tableClient;
+    }
 
     @FunctionName("register")
     public HttpResponseMessage run(
@@ -31,10 +69,12 @@ public class RegistrationFunction {
             final ExecutionContext context) {
 
         Logger logger = context.getLogger();
+        logger.info("Registration request received");
 
         // Parse JSON body
         String body = request.getBody().orElse(null);
         if (body == null || body.isBlank()) {
+            logger.warning("Request rejected: empty or missing body");
             return jsonResponse(request, HttpStatus.BAD_REQUEST,
                     Map.of("error", "Request body is required"));
         }
@@ -43,6 +83,7 @@ public class RegistrationFunction {
         try {
             json = gson.fromJson(body, JsonObject.class);
         } catch (Exception e) {
+            logger.warning("Request rejected: invalid JSON - " + e.getMessage());
             return jsonResponse(request, HttpStatus.BAD_REQUEST,
                     Map.of("error", "Invalid JSON"));
         }
@@ -50,21 +91,18 @@ public class RegistrationFunction {
         // Validate
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
+            logger.warning("Validation failed: " + String.join(", ", errors));
             return jsonResponse(request, HttpStatus.BAD_REQUEST,
                     Map.of("errors", errors));
         }
 
         // Store in Table Storage
         try {
-            String connStr = System.getenv("AzureWebJobsStorage");
-            TableServiceClient serviceClient = new TableServiceClientBuilder()
-                    .connectionString(connStr)
-                    .buildClient();
-            serviceClient.createTableIfNotExists(TABLE_NAME);
-            TableClient tableClient = serviceClient.getTableClient(TABLE_NAME);
+            TableClient client = getTableClient(logger);
 
             String partitionKey = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
             String rowKey = UUID.randomUUID().toString();
+            logger.info("Storing registration with id: " + rowKey);
 
             TableEntity entity = new TableEntity(partitionKey, rowKey)
                     .addProperty("registrant", getStr(json, "registrant"))
@@ -80,15 +118,19 @@ public class RegistrationFunction {
                     .addProperty("relationshipOther", getStr(json, "relationship_other"))
                     .addProperty("submittedAt", OffsetDateTime.now().toString());
 
-            tableClient.createEntity(entity);
+            client.createEntity(entity);
 
-            logger.info("Registration stored: " + rowKey);
+            logger.info("Registration stored successfully: id=" + rowKey + ", partition=" + partitionKey);
 
             return jsonResponse(request, HttpStatus.CREATED,
                     Map.of("id", rowKey, "redirect_url", Objects.toString(getStr(json, "redirect_url"), "")));
 
+        } catch (IllegalStateException e) {
+            logger.severe("Configuration error: " + e.getMessage());
+            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("error", "Internal server error"));
         } catch (Exception e) {
-            logger.severe("Table Storage error: " + e.getMessage());
+            logger.severe("Table Storage error: " + e.getClass().getName() + " - " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
         }
