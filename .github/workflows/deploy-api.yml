@@ -18,7 +18,7 @@ on:
 env:
   JAVA_VERSION: '21'
   BASE_APP_NAME: deltav-api
-  FUNCTION_APP_NAME: deltav-api-${{ github.event.inputs.environment }}
+  FUNCTION_APP_NAME: deltavapi-${{ github.event.inputs.environment }}
 
 jobs:
   build-and-deploy:
