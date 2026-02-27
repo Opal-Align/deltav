@@ -57,7 +57,7 @@
                 <version>${azure.functions.maven.plugin.version}</version>
                 <configuration>
                     <appName>${functionAppName}</appName>
-                    <resourceGroup>deltav-rg</resourceGroup>
+                    <resourceGroup>opalalign-rg-dev</resourceGroup>
                     <region>eastus</region>
                     <runtime>
                         <os>linux</os>
