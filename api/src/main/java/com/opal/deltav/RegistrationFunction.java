@@ -64,7 +64,7 @@ public class RegistrationFunction {
                     name = "req",
                     methods = {HttpMethod.POST, HttpMethod.OPTIONS},
                     authLevel = AuthorizationLevel.ANONYMOUS,
-                    route = "register"
+                    route = "api/register"
             ) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
 

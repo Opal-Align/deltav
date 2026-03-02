@@ -10,112 +10,112 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="page">
-    <main class="form-card">
-      <header class="intro">
-        <h1>Welcome!</h1>
-        <p class="intro-text">
-          To get started, please complete this registration form. Providing accurate information helps us prepare for your care and ensures a smooth experience. Your privacy is important to us, and all information is securely protected.
-        </p>
-      </header>
+<div class="page">
+  <main class="form-card">
+    <header class="intro">
+      <h1>Welcome!</h1>
+      <p class="intro-text">
+        To get started, please complete this registration form. Providing accurate information helps us prepare for your care and ensures a smooth experience. Your privacy is important to us, and all information is securely protected.
+      </p>
+    </header>
 
-      <form id="registration-form" class="form" novalidate>
-        <input type="hidden" name="next" id="next-url" value="" />
+    <form id="registration-form" class="form" novalidate>
+      <input type="hidden" name="next" id="next-url" value="" />
 
-        <section class="section">
-          <h2 class="section-title">Who is this registration for?</h2>
-          <div class="radio-group" role="group" aria-label="Who is this registration for?">
-            <label class="radio-label">
-              <input type="radio" name="registrant" value="myself" checked />
-              <span class="radio-text">Myself</span>
-            </label>
-            <label class="radio-label">
-              <input type="radio" name="registrant" value="another" />
-              <span class="radio-text">Another patient</span>
-            </label>
-          </div>
-
-          <div id="relationship-fields" class="conditional-fields" hidden>
-            <label class="field-label" for="relationship">Relationship to patient</label>
-            <select id="relationship" name="relationship" class="input select" aria-describedby="err-relationship">
-              <option value="">Select relationship</option>
-              <option value="parent-guardian">Parent / Guardian</option>
-              <option value="spouse-partner">Spouse / Partner</option>
-              <option value="child">Child</option>
-              <option value="caregiver">Caregiver</option>
-              <option value="legal-representative">Legal Representative</option>
-              <option value="other">Other</option>
-            </select>
-            <span class="error-msg" id="err-relationship" role="alert"></span>
-            <div id="relationship-other-wrap" class="other-wrap" hidden>
-              <label class="field-label" for="relationship-other">Please specify</label>
-              <input type="text" id="relationship-other" name="relationship_other" class="input" placeholder="Other relationship" />
-              <span class="error-msg" id="err-relationship-other" role="alert"></span>
-            </div>
-          </div>
-        </section>
-
-        <section class="section">
-          <h2 class="section-title">Patient Information</h2>
-          <div class="row">
-            <div class="field">
-              <label class="field-label" for="first-name">First Name</label>
-              <input type="text" id="first-name" name="first_name" class="input" required placeholder="First name" />
-              <span class="error-msg" id="err-first-name" role="alert"></span>
-            </div>
-            <div class="field">
-              <label class="field-label" for="middle-name">Middle Name <span class="optional">(optional)</span></label>
-              <input type="text" id="middle-name" name="middle_name" class="input" placeholder="Middle name" />
-            </div>
-          </div>
-          <div class="field">
-            <label class="field-label" for="last-name">Last Name</label>
-            <input type="text" id="last-name" name="last_name" class="input" required placeholder="Last name" />
-            <span class="error-msg" id="err-last-name" role="alert"></span>
-          </div>
-          <div class="field">
-            <label class="field-label" for="dob">Date of Birth</label>
-            <input type="date" id="dob" name="dob" class="input" required />
-            <span class="error-msg" id="err-dob" role="alert"></span>
-          </div>
-        </section>
-
-        <section class="section">
-          <h2 class="section-title">Contact Information</h2>
-          <div class="field">
-            <label class="field-label" for="phone">Phone Number</label>
-            <input type="tel" id="phone" name="phone" class="input" required placeholder="(555) 000-0000" />
-            <span class="error-msg" id="err-phone" role="alert"></span>
-          </div>
-          <div class="field">
-            <label class="field-label" for="email">Email Address</label>
-            <input type="email" id="email" name="email" class="input" required placeholder="you@example.com" />
-            <span class="error-msg" id="err-email" role="alert"></span>
-          </div>
-        </section>
-
-        <section class="section section-consent">
-          <h2 class="section-title">Consent / Acknowledgement</h2>
-          <div class="checkbox-group">
-            <label class="checkbox-label">
-              <input type="checkbox" id="confirm-accurate" name="confirm_accurate" required />
-              <span class="checkbox-text">I confirm the information is accurate</span>
-            </label>
-            <span class="error-msg" id="err-confirm-accurate" role="alert"></span>
-            <label class="checkbox-label">
-              <input type="checkbox" id="agree-privacy" name="agree_privacy" required />
-              <span class="checkbox-text">I agree to <a href="#" class="link">privacy policy</a> / <a href="#" class="link">HIPAA notice</a></span>
-            </label>
-            <span class="error-msg" id="err-agree-privacy" role="alert"></span>
-          </div>
-        </section>
-
-        <div class="actions">
-          <button type="submit" class="btn btn-primary">Continue</button>
+      <section class="section">
+        <h2 class="section-title">Who is this registration for?</h2>
+        <div class="radio-group" role="group" aria-label="Who is this registration for?">
+          <label class="radio-label">
+            <input type="radio" name="registrant" value="myself" checked />
+            <span class="radio-text">Myself</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="registrant" value="another" />
+            <span class="radio-text">Another patient</span>
+          </label>
         </div>
-      </form>
-    </main>
-  </div>
-  <script src="form.js"></script>
+
+        <div id="relationship-fields" class="conditional-fields" hidden>
+          <label class="field-label" for="relationship">Relationship to patient</label>
+          <select id="relationship" name="relationship" class="input select" aria-describedby="err-relationship">
+            <option value="">Select relationship</option>
+            <option value="parent-guardian">Parent / Guardian</option>
+            <option value="spouse-partner">Spouse / Partner</option>
+            <option value="child">Child</option>
+            <option value="caregiver">Caregiver</option>
+            <option value="legal-representative">Legal Representative</option>
+            <option value="other">Other</option>
+          </select>
+          <span class="error-msg" id="err-relationship" role="alert"></span>
+          <div id="relationship-other-wrap" class="other-wrap" hidden>
+            <label class="field-label" for="relationship-other">Please specify</label>
+            <input type="text" id="relationship-other" name="relationship_other" class="input" placeholder="Other relationship" />
+            <span class="error-msg" id="err-relationship-other" role="alert"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Patient Information</h2>
+        <div class="row">
+          <div class="field">
+            <label class="field-label" for="first-name">First Name</label>
+            <input type="text" id="first-name" name="first_name" class="input" required placeholder="First name" />
+            <span class="error-msg" id="err-first-name" role="alert"></span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="middle-name">Middle Name <span class="optional">(optional)</span></label>
+            <input type="text" id="middle-name" name="middle_name" class="input" placeholder="Middle name" />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label" for="last-name">Last Name</label>
+          <input type="text" id="last-name" name="last_name" class="input" required placeholder="Last name" />
+          <span class="error-msg" id="err-last-name" role="alert"></span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="dob">Date of Birth</label>
+          <input type="date" id="dob" name="dob" class="input" required />
+          <span class="error-msg" id="err-dob" role="alert"></span>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Contact Information</h2>
+        <div class="field">
+          <label class="field-label" for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" class="input" required placeholder="(555) 000-0000" />
+          <span class="error-msg" id="err-phone" role="alert"></span>
+        </div>
+        <div class="field">
+          <label class="field-label" for="email">Email Address</label>
+          <input type="email" id="email" name="email" class="input" required placeholder="you@example.com" />
+          <span class="error-msg" id="err-email" role="alert"></span>
+        </div>
+      </section>
+
+      <section class="section section-consent">
+        <h2 class="section-title">Consent / Acknowledgement</h2>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="confirm-accurate" name="confirm_accurate" required />
+            <span class="checkbox-text">I confirm the information is accurate</span>
+          </label>
+          <span class="error-msg" id="err-confirm-accurate" role="alert"></span>
+          <label class="checkbox-label">
+            <input type="checkbox" id="agree-privacy" name="agree_privacy" required />
+            <span class="checkbox-text">I agree to <a href="#" class="link">privacy policy</a> / <a href="#" class="link">HIPAA notice</a></span>
+          </label>
+          <span class="error-msg" id="err-agree-privacy" role="alert"></span>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button type="submit" class="btn btn-primary">Continue</button>
+      </div>
+    </form>
+  </main>
+</div>
+<script src="form.js"></script>
 </body>
 </html>

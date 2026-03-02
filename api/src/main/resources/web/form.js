@@ -204,39 +204,33 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     })
-      .then(function (res) {
-        return res.json().then(function (data) {
-          return { status: res.status, data: data };
-        });
-      })
-      .then(function (result) {
-        if (result.status >= 200 && result.status < 300) {
-          var redirect = (result.data && result.data.redirect_url) || nextInput.value || "";
-          if (redirect && isAllowedRedirect(redirect)) {
-            window.location.href = redirect;
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { status: res.status, data: data };
+          });
+        })
+        .then(function (result) {
+          if (result.status === 201) {
+            var redirect = result.data.redirect_url;
+            if (redirect && isAllowedRedirect(redirect)) {
+              window.location.href = redirect;
+            } else {
+              alert("Registration submitted successfully!");
+              form.reset();
+              toggleFromRegistrant();
+            }
+          } else if (result.status === 400 && result.data.errors) {
+            alert("Validation errors:\n" + result.data.errors.join("\n"));
           } else {
-            alert("Registration submitted successfully. We'll be in touch soon.");
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Continue";
+            alert("Something went wrong. Please try again.");
           }
-        } else {
-          var errors = (result.data && (result.data.errors || result.data.error)) || "Unknown error";
-          if (Array.isArray(errors)) {
-            alert("Please fix the following errors:\n\n" + errors.join("\n"));
-          } else if (typeof errors === "string") {
-            alert(errors);
-          } else {
-            alert("There was a problem submitting the form.");
-          }
+        })
+        .catch(function () {
+          alert("Network error. Please check your connection and try again.");
+        })
+        .finally(function () {
           submitBtn.disabled = false;
           submitBtn.textContent = "Continue";
-        }
-      })
-      .catch(function (err) {
-        console.error(err);
-        alert("Network or server error. Please try again later.");
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Continue";
-      });
+        });
   });
 })();

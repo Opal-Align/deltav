@@ -1,4 +1,3 @@
-/* Copied from project root styles.css to bundle with the Function */
 /* --- Variables --- */
 :root {
   --color-bg: #f0f4f8;
@@ -111,8 +110,8 @@ body {
   border-bottom: 1px solid var(--color-border);
 }
 
-.section:last-child {
-  border-bottom: 0;
+.section:last-of-type {
+  border-bottom: none;
 }
 
 .section-title {
@@ -122,150 +121,222 @@ body {
   color: var(--color-text);
 }
 
-/* --- Grid / fields --- */
-.row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
-@media (min-width: 520px) {
-  .row {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.field-label {
-  font-size: 0.9375rem;
-  color: var(--color-text);
-}
-
-.input,
-.select {
-  appearance: none;
-  width: 100%;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--color-text);
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.input:focus,
-.select:focus {
-  border-color: var(--color-focus);
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
-}
-
-.input.has-error,
-.select.has-error {
-  border-color: var(--color-error);
-  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.15);
-}
-
-.optional {
-  color: var(--color-text-muted);
-  font-weight: 400;
-}
-
-/* --- Radios --- */
+/* --- Radio group --- */
 .radio-group {
-  display: flex;
-  gap: 1rem;
-}
-
-.radio-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.radio-text {
-  font-size: 0.95rem;
-}
-
-/* --- Checkbox --- */
-.checkbox-group {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
-.checkbox-label {
-  display: inline-flex;
+.radio-label {
+  display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.radio-label input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.radio-text {
+  user-select: none;
+}
+
+/* --- Conditional relationship fields --- */
+.conditional-fields {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.conditional-fields[hidden] {
+  display: none !important;
+}
+
+.other-wrap {
+  margin-top: 1rem;
+}
+
+.other-wrap[hidden] {
+  display: none !important;
+}
+
+/* --- Fields --- */
+.field {
+  margin-bottom: 1.25rem;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.input:hover {
+  border-color: #cbd5e1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.input:invalid:not(:placeholder-shown):not(:focus) {
+  border-color: var(--color-error);
+}
+
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}
+
+/* --- Error messages --- */
+.error-msg {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  min-height: 1.25em;
+}
+
+.input.has-error {
+  border-color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+/* --- Checkbox group --- */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+}
+
+.checkbox-label input {
+  margin-top: 0.2em;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  accent-color: var(--color-primary);
   cursor: pointer;
 }
 
 .checkbox-text {
-  font-size: 0.95rem;
+  user-select: none;
+  line-height: 1.4;
 }
 
-/* --- Errors --- */
-.error-msg {
-  color: var(--color-error);
-  font-size: 0.875rem;
-  background: var(--color-error-bg);
-  padding: 0.375rem 0.5rem;
-  border-radius: var(--radius-sm);
+.link {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-/* --- Buttons --- */
+.link:hover {
+  color: var(--color-primary-hover);
+}
+
+.section-consent .error-msg {
+  margin-top: -0.25rem;
+}
+
+/* --- Submit --- */
 .actions {
-  margin-top: 1.25rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font);
+  font-size: 0.9375rem;
   font-weight: 600;
+  line-height: 1.3;
+  border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease, transform 0.05s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
 }
 
 .btn-primary {
-  background: var(--color-primary);
+  width: 100%;
   color: #fff;
+  background: var(--color-primary);
 }
 
 .btn-primary:hover {
   background: var(--color-primary-hover);
 }
 
-/* --- Links --- */
-.link {
-  color: var(--color-focus);
-  text-decoration: none;
+.btn-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
-.link:hover {
-  text-decoration: underline;
-}
-
-/* --- Conditional fields --- */
-.conditional-fields {
-  margin-top: 1rem;
-  padding: 1rem;
-  border-radius: var(--radius-sm);
-  background: #f8fafc;
-  border: 1px solid var(--color-border);
-}
-
-.other-wrap {
-  margin-top: 0.75rem;
+@media (min-width: 640px) {
+  .btn-primary {
+    width: auto;
+    min-width: 160px;
+  }
 }

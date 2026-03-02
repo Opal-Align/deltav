@@ -42,15 +42,16 @@ public class StaticFileFunction {
         Logger logger = context.getLogger();
 
         String path = request.getQueryParameters().getOrDefault("path", ""); // not used; for clarity
-        // The bound route parameter isn't directly exposed via the typed signature, so derive from URL
-        String rawUrl = request.getUri().getPath(); // e.g. /api, /api/index.html, /api/styles.css
+        // With empty routePrefix, the request path maps directly to the resource path
+        String rawUrl = request.getUri().getPath(); // e.g. /, /index.html, /styles.css
 
-        // Trim the route prefix ("/api") if present so we can map to resource name
-        String resource = rawUrl;
-        String prefix = "/" + getRoutePrefix(); // usually "/api"
-        if (resource.startsWith(prefix)) {
-            resource = resource.substring(prefix.length()); // e.g. "", "/index.html"
+        // If the path targets the API namespace, don't serve static content
+        if (rawUrl.equals("/api") || rawUrl.equals("/api/") || rawUrl.startsWith("/api/")) {
+            return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                    .body("Not found")).build();
         }
+
+        String resource = rawUrl;
         if (resource.isEmpty() || "/".equals(resource)) {
             resource = "/index.html";
         }
