@@ -62,7 +62,7 @@ public class RegistrationFunction {
     public HttpResponseMessage run(
             @HttpTrigger(
                     name = "req",
-                    methods = {HttpMethod.POST},
+                    methods = {HttpMethod.POST, HttpMethod.OPTIONS},
                     authLevel = AuthorizationLevel.ANONYMOUS,
                     route = "register"
             ) HttpRequestMessage<Optional<String>> request,
@@ -70,6 +70,11 @@ public class RegistrationFunction {
 
         Logger logger = context.getLogger();
         logger.info("Registration request received");
+
+        // Handle CORS preflight
+        if (request.getHttpMethod() == HttpMethod.OPTIONS) {
+            return corsResponse(request, HttpStatus.NO_CONTENT, null);
+        }
 
         // Parse JSON body
         String body = request.getBody().orElse(null);
@@ -195,9 +200,32 @@ public class RegistrationFunction {
     }
 
     private HttpResponseMessage jsonResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
-        return request.createResponseBuilder(status)
+        HttpResponseMessage.Builder builder = request.createResponseBuilder(status)
                 .body(gson.toJson(body))
-                .header("Content-Type", "application/json")
-                .build();
+                .header("Content-Type", "application/json");
+        addCorsHeaders(builder, request);
+        return builder.build();
+    }
+
+    private HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
+        HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
+        if (body != null) {
+            builder.body(gson.toJson(body))
+                   .header("Content-Type", "application/json");
+        }
+        addCorsHeaders(builder, request);
+        return builder.build();
+    }
+
+    private void addCorsHeaders(HttpResponseMessage.Builder builder, HttpRequestMessage<?> request) {
+        String origin = request.getHeaders() != null ? request.getHeaders().get("Origin") : null;
+        if (origin == null || origin.isBlank()) {
+            origin = "*";
+        }
+        builder.header("Access-Control-Allow-Origin", origin)
+               .header("Vary", "Origin")
+               .header("Access-Control-Allow-Methods", "POST, OPTIONS")
+               .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+               .header("Access-Control-Max-Age", "3600");
     }
 }
