@@ -199,9 +199,14 @@
     submitBtn.disabled = true;
     submitBtn.textContent = "Submitting...";
 
+    // Attach short-lived token if present
+    if (window.DELTAV_TOKEN) {
+      payload.registration_token = window.DELTAV_TOKEN;
+    }
+
     fetch(API_BASE + "/api/register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Registration-Token": (window.DELTAV_TOKEN || "") },
       body: JSON.stringify(payload)
     })
         .then(function (res) {

@@ -8,18 +8,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.*;
 import java.util.logging.Logger;
 
 /**
  * Serves static assets (index.html, styles.css, form.js) from classpath under /web.
- * Route is a catch-all under the default route prefix ("api").
- *
- * Examples after deploy (assuming app name deltav-api):
- *  - https://deltav-api.azurewebsites.net/api           -> index.html
- *  - https://deltav-api.azurewebsites.net/api/index.html
- *  - https://deltav-api.azurewebsites.net/api/styles.css
- *  - https://deltav-api.azurewebsites.net/api/form.js
+ * Now injects a short-lived token into index.html for subsequent POST /api/register validation.
  */
 public class StaticFileFunction {
 
@@ -79,6 +74,34 @@ public class StaticFileFunction {
                 contentType = "application/octet-stream";
             }
 
+            // If serving index.html, inject a short-lived token
+            if ("html".equals(ext) && resource.endsWith("/index.html")) {
+                String secret = System.getenv("REGISTRATION_TOKEN_SECRET");
+                if (secret == null || secret.isBlank()) {
+                    logger.severe("REGISTRATION_TOKEN_SECRET is not configured");
+                    return addCors(request, request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body("Server configuration error")).build();
+                }
+                long ttl = 900; // default 15 minutes
+                String ttlEnv = System.getenv("REGISTRATION_TOKEN_TTL_SECONDS");
+                if (ttlEnv != null && !ttlEnv.isBlank()) {
+                    try { ttl = Math.max(60, Long.parseLong(ttlEnv)); } catch (Exception ignore) {}
+                }
+                long exp = Instant.now().getEpochSecond() + ttl;
+                String token = TokenUtil.createToken(exp, secret);
+
+                String html = new String(data, StandardCharsets.UTF_8);
+                String inject = "<script>window.DELTAV_TOKEN='" + token + "';window.DELTAV_TOKEN_EXP=" + exp + ";</script>";
+                if (html.contains("</head>")) {
+                    html = html.replace("</head>", inject + "</head>");
+                } else if (html.contains("</body>")) {
+                    html = html.replace("</body>", inject + "</body>");
+                } else {
+                    html = html + inject;
+                }
+                data = html.getBytes(StandardCharsets.UTF_8);
+            }
+
             HttpResponseMessage.Builder builder = request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", contentType)
                     .header("Cache-Control", ext.equals("html") ? "no-store, must-revalidate" : "public, max-age=3600");
@@ -125,7 +148,7 @@ public class StaticFileFunction {
         builder.header("Access-Control-Allow-Origin", origin)
                 .header("Vary", "Origin")
                 .header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS")
-                .header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+                .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Registration-Token");
         return builder;
     }
 }
