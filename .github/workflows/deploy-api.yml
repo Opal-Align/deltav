@@ -13,12 +13,21 @@ on:
         type: choice
         options:
           - dev
-          - prod
+          - main
+      resourceGroupName:
+        description: 'Azure Resource Group to deploy to'
+        required: true
+        default: opalalign-rg-dev
+        type: choice
+        options:
+          - opalalign-rg-dev
+          - opalalign-rg
 
 env:
   JAVA_VERSION: '21'
   BASE_APP_NAME: deltav-api
-  FUNCTION_APP_NAME: deltavapi-${{ github.event.inputs.environment }}
+  FUNCTION_APP_NAME: ${{ github.event.inputs.environment == 'main' && 'deltavapi' || format('deltavapi-{0}', github.event.inputs.environment) }}
+  RESOURCE_GROUP_NAME: ${{ github.event.inputs.resourceGroupName }}
 
 jobs:
   build-and-deploy:
@@ -32,6 +41,7 @@ jobs:
         run: |
           echo "Environment: ${{ github.event.inputs.environment }}"
           echo "Function App: ${{ env.FUNCTION_APP_NAME }}"
+          echo "Resource Group: ${{ env.RESOURCE_GROUP_NAME }}"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -44,7 +54,7 @@ jobs:
         working-directory: api
         run: |
           mvn clean package azure-functions:package \
-            -DfunctionAppName=${{ env.FUNCTION_APP_NAME }} \
+            -DfunctionAppName=${{ env.FUNCTION_APP_NAME }} -DresourceGroupName=${{ env.RESOURCE_GROUP_NAME }} \
             --batch-mode --no-transfer-progress
 
       - name: Azure Login
