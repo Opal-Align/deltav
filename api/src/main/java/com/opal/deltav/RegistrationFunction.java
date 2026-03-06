@@ -93,7 +93,25 @@ public class RegistrationFunction {
                     Map.of("error", "Invalid JSON"));
         }
 
-        // Validate
+        // Token validation (short-lived anti-automation token)
+        String secret = System.getenv("REGISTRATION_TOKEN_SECRET");
+        if (secret == null || secret.isBlank()) {
+            logger.severe("REGISTRATION_TOKEN_SECRET is not configured");
+            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
+                    Map.of("error", "Server configuration error"));
+        }
+        String headerToken = getHeaderIgnoreCase(request.getHeaders(), "X-Registration-Token");
+        String bodyToken = json.has("registration_token") && !json.get("registration_token").isJsonNull()
+                ? json.get("registration_token").getAsString() : null;
+        String token = (headerToken != null && !headerToken.isBlank()) ? headerToken : bodyToken;
+        TokenUtil.ValidationResult tokenResult = TokenUtil.validate(token, secret);
+        if (!tokenResult.valid) {
+            logger.warning("Registration rejected due to token error: " + tokenResult.error);
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", tokenResult.error));
+        }
+
+        // Validate business fields
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
             logger.warning("Validation failed: " + String.join(", ", errors));
@@ -225,7 +243,17 @@ public class RegistrationFunction {
         builder.header("Access-Control-Allow-Origin", origin)
                .header("Vary", "Origin")
                .header("Access-Control-Allow-Methods", "POST, OPTIONS")
-               .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+               .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Registration-Token")
                .header("Access-Control-Max-Age", "3600");
+    }
+
+    private String getHeaderIgnoreCase(Map<String, String> headers, String name) {
+        if (headers == null || name == null) return null;
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 }
