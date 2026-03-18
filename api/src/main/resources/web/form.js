@@ -72,18 +72,41 @@
 
   relationshipSelect.addEventListener("change", toggleRelationshipOther);
 
+  // Read practice ID from URL
+  var practiceId = new URLSearchParams(window.location.search).get("practice") || "";
+
   // Initialize next URL and conditional state
   nextInput.value = getNextUrl();
   toggleFromRegistrant();
 
-  // Block future dates for date of birth
+  // Auto-format DOB input as MM/DD/YYYY
   var dobInput = document.getElementById("dob");
   if (dobInput) {
-    var today = new Date();
-    var y = today.getFullYear();
-    var m = String(today.getMonth() + 1).padStart(2, "0");
-    var d = String(today.getDate()).padStart(2, "0");
-    dobInput.setAttribute("max", y + "-" + m + "-" + d);
+    dobInput.addEventListener("input", function (e) {
+      var val = dobInput.value.replace(/[^\d]/g, "");
+      if (val.length >= 5) {
+        dobInput.value = val.slice(0, 2) + "/" + val.slice(2, 4) + "/" + val.slice(4, 8);
+      } else if (val.length >= 3) {
+        dobInput.value = val.slice(0, 2) + "/" + val.slice(2);
+      }
+    });
+  }
+
+  function parseDob(str) {
+    var parts = str.split("/");
+    if (parts.length !== 3) return null;
+    var mm = parseInt(parts[0], 10);
+    var dd = parseInt(parts[1], 10);
+    var yyyy = parseInt(parts[2], 10);
+    if (!mm || !dd || !yyyy || mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900) return null;
+    var date = new Date(yyyy, mm - 1, dd);
+    if (date.getMonth() !== mm - 1 || date.getDate() !== dd) return null;
+    return date;
+  }
+
+  function dobToIso(str) {
+    var parts = str.split("/");
+    return parts[2] + "-" + parts[0] + "-" + parts[1];
   }
 
   function showError(id, message) {
@@ -110,8 +133,6 @@
     var firstName = document.getElementById("first-name");
     var lastName = document.getElementById("last-name");
     var dob = document.getElementById("dob");
-    var phone = document.getElementById("phone");
-    var email = document.getElementById("email");
     var confirmAccurate = document.getElementById("confirm-accurate");
     var agreePrivacy = document.getElementById("agree-privacy");
 
@@ -123,24 +144,16 @@
       showError("err-last-name", "Last name is required.");
       valid = false;
     }
-    if (!dob.value) {
+    if (!dob.value.trim()) {
       showError("err-dob", "Date of birth is required.");
       valid = false;
-    } else if (new Date(dob.value) > new Date()) {
-      showError("err-dob", "Date of birth cannot be in the future.");
-      valid = false;
-    }
-    if (!phone.value.trim()) {
-      showError("err-phone", "Phone number is required.");
-      valid = false;
-    }
-    if (!email.value.trim()) {
-      showError("err-email", "Email is required.");
-      valid = false;
     } else {
-      var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.value.trim())) {
-        showError("err-email", "Please enter a valid email address.");
+      var parsed = parseDob(dob.value.trim());
+      if (!parsed) {
+        showError("err-dob", "Please enter a valid date in MM/DD/YYYY format.");
+        valid = false;
+      } else if (parsed > new Date()) {
+        showError("err-dob", "Date of birth cannot be in the future.");
         valid = false;
       }
     }
@@ -176,13 +189,14 @@
     if (!validate()) return;
 
     var registrantValue = form.querySelector('input[name="registrant"]:checked').value;
+    var patientTypeValue = form.querySelector('input[name="patient_type"]:checked').value;
     var payload = {
+      practice: practiceId,
       registrant: registrantValue,
+      patient_type: patientTypeValue,
       first_name: document.getElementById("first-name").value.trim(),
       last_name: document.getElementById("last-name").value.trim(),
-      dob: document.getElementById("dob").value,
-      phone: document.getElementById("phone").value.trim(),
-      email: document.getElementById("email").value.trim(),
+      dob: dobToIso(document.getElementById("dob").value.trim()),
       confirm_accurate: document.getElementById("confirm-accurate").checked,
       agree_privacy: document.getElementById("agree-privacy").checked,
       redirect_url: nextInput.value.trim()
@@ -217,7 +231,7 @@
         .then(function (result) {
           if (result.status === 201) {
             var redirect = result.data.redirect_url;
-            if (redirect && isAllowedRedirect(redirect)) {
+            if (redirect) {
               window.location.href = redirect;
             } else {
               alert("Registration submitted successfully!");

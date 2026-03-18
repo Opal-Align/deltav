@@ -56,6 +56,20 @@
       </section>
 
       <section class="section">
+        <h2 class="section-title">Patient Status</h2>
+        <div class="radio-group" role="group" aria-label="Are you a new or existing patient?">
+          <label class="radio-label">
+            <input type="radio" name="patient_type" value="new" checked />
+            <span class="radio-text">New patient</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="patient_type" value="existing" />
+            <span class="radio-text">Existing patient</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
         <h2 class="section-title">Patient Information</h2>
         <div class="row">
           <div class="field">
@@ -75,22 +89,8 @@
         </div>
         <div class="field">
           <label class="field-label" for="dob">Date of Birth</label>
-          <input type="date" id="dob" name="dob" class="input" required />
+          <input type="text" id="dob" name="dob" class="input" required placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" />
           <span class="error-msg" id="err-dob" role="alert"></span>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">Contact Information</h2>
-        <div class="field">
-          <label class="field-label" for="phone">Phone Number</label>
-          <input type="tel" id="phone" name="phone" class="input" required placeholder="(555) 000-0000" />
-          <span class="error-msg" id="err-phone" role="alert"></span>
-        </div>
-        <div class="field">
-          <label class="field-label" for="email">Email Address</label>
-          <input type="email" id="email" name="email" class="input" required placeholder="you@example.com" />
-          <span class="error-msg" id="err-email" role="alert"></span>
         </div>
       </section>
 
@@ -116,6 +116,11 @@
     </form>
   </main>
 </div>
+<script>
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+    window.DELTAV_API_URL = "http://localhost:7071";
+  }
+</script>
 <script src="form.js"></script>
 </body>
 </html>

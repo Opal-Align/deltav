@@ -128,12 +128,12 @@ public class RegistrationFunction {
             logger.info("Storing registration with id: " + rowKey);
 
             TableEntity entity = new TableEntity(partitionKey, rowKey)
+                    .addProperty("practice", getStr(json, "practice"))
                     .addProperty("registrant", getStr(json, "registrant"))
+                    .addProperty("patientType", getStr(json, "patient_type"))
                     .addProperty("firstName", getStr(json, "first_name"))
                     .addProperty("lastName", getStr(json, "last_name"))
                     .addProperty("dob", getStr(json, "dob"))
-                    .addProperty("phone", getStr(json, "phone"))
-                    .addProperty("email", getStr(json, "email"))
                     .addProperty("confirmAccurate", getBool(json, "confirm_accurate"))
                     .addProperty("agreePrivacy", getBool(json, "agree_privacy"))
                     .addProperty("redirectUrl", getStr(json, "redirect_url"))
@@ -165,13 +165,7 @@ public class RegistrationFunction {
         requireNonBlank(json, "first_name", "First name is required", errors);
         requireNonBlank(json, "last_name", "Last name is required", errors);
         requireNonBlank(json, "dob", "Date of birth is required", errors);
-        requireNonBlank(json, "phone", "Phone is required", errors);
-        requireNonBlank(json, "email", "Email is required", errors);
-
-        String email = getStr(json, "email");
-        if (email != null && !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            errors.add("Invalid email format");
-        }
+        requireNonBlank(json, "patient_type", "Patient type is required", errors);
 
         String dob = getStr(json, "dob");
         if (dob != null && !dob.isBlank()) {
