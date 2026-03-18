@@ -145,8 +145,12 @@ public class RegistrationFunction {
 
             logger.info("Registration stored successfully: id=" + rowKey + ", partition=" + partitionKey);
 
+            String practiceId = getStr(json, "practice");
+            String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
+            logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
+
             return jsonResponse(request, HttpStatus.CREATED,
-                    Map.of("id", rowKey, "redirect_url", Objects.toString(getStr(json, "redirect_url"), "")));
+                    Map.of("id", rowKey, "redirect_url", Objects.toString(redirectUrl, "")));
 
         } catch (IllegalStateException e) {
             logger.severe("Configuration error: " + e.getMessage());

@@ -198,8 +198,7 @@
       last_name: document.getElementById("last-name").value.trim(),
       dob: dobToIso(document.getElementById("dob").value.trim()),
       confirm_accurate: document.getElementById("confirm-accurate").checked,
-      agree_privacy: document.getElementById("agree-privacy").checked,
-      redirect_url: nextInput.value.trim()
+      agree_privacy: document.getElementById("agree-privacy").checked
     };
 
     if (registrantValue === "another") {
