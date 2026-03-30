@@ -1,4 +1,4 @@
-name: Build & Deploy DeltaV API
+name: Build & Deploy DeltaV Azure Function
 
 permissions:
   id-token: write
