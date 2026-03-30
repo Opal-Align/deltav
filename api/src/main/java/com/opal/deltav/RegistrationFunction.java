@@ -32,7 +32,6 @@ public class RegistrationFunction {
 
                     TableServiceClient serviceClient;
                     if (storageAccountName != null && !storageAccountName.isBlank()) {
-                        // Use managed identity / service principal via DefaultAzureCredential
                         logger.info("Initializing Table Storage client with managed identity");
                         String endpoint = "https://" + storageAccountName + ".table.core.windows.net";
                         serviceClient = new TableServiceClientBuilder()
@@ -40,7 +39,6 @@ public class RegistrationFunction {
                                 .credential(new DefaultAzureCredentialBuilder().build())
                                 .buildClient();
                     } else if (connStr != null && !connStr.isBlank()) {
-                        // Fallback to connection string
                         logger.info("Initializing Table Storage client with connection string");
                         serviceClient = new TableServiceClientBuilder()
                                 .connectionString(connStr)
@@ -71,12 +69,10 @@ public class RegistrationFunction {
         Logger logger = context.getLogger();
         logger.info("Registration request received");
 
-        // Handle CORS preflight
         if (request.getHttpMethod() == HttpMethod.OPTIONS) {
             return corsResponse(request, HttpStatus.NO_CONTENT, null);
         }
 
-        // Parse JSON body
         String body = request.getBody().orElse(null);
         if (body == null || body.isBlank()) {
             logger.warning("Request rejected: empty or missing body");
@@ -93,7 +89,6 @@ public class RegistrationFunction {
                     Map.of("error", "Invalid JSON"));
         }
 
-        // Token validation (short-lived anti-automation token)
         String secret = System.getenv("REGISTRATION_TOKEN_SECRET");
         if (secret == null || secret.isBlank()) {
             logger.severe("REGISTRATION_TOKEN_SECRET is not configured");
@@ -111,7 +106,6 @@ public class RegistrationFunction {
                     Map.of("error", tokenResult.error));
         }
 
-        // Validate business fields
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
             logger.warning("Validation failed: " + String.join(", ", errors));
@@ -119,16 +113,17 @@ public class RegistrationFunction {
                     Map.of("errors", errors));
         }
 
-        // Store in Table Storage
         try {
             TableClient client = getTableClient(logger);
 
-            String partitionKey = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+            String practiceId = getStr(json, "practice");
+            String monthYear = LocalDate.now().format(DateTimeFormatter.ofPattern("MM-yyyy"));
+            String partitionKey = practiceId + "_" + monthYear;
             String rowKey = UUID.randomUUID().toString();
-            logger.info("Storing registration with id: " + rowKey);
+            logger.info("Storing registration: partitionKey=" + partitionKey + ", rowKey=" + rowKey);
 
             TableEntity entity = new TableEntity(partitionKey, rowKey)
-                    .addProperty("practice", getStr(json, "practice"))
+                    .addProperty("practice", practiceId)
                     .addProperty("registrant", getStr(json, "registrant"))
                     .addProperty("patientType", getStr(json, "patient_type"))
                     .addProperty("firstName", getStr(json, "first_name"))
@@ -142,10 +137,8 @@ public class RegistrationFunction {
                     .addProperty("submittedAt", OffsetDateTime.now().toString());
 
             client.createEntity(entity);
+            logger.info("Registration stored successfully: " + partitionKey + "/" + rowKey);
 
-            logger.info("Registration stored successfully: id=" + rowKey + ", partition=" + partitionKey);
-
-            String practiceId = getStr(json, "practice");
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
@@ -182,12 +175,8 @@ public class RegistrationFunction {
             }
         }
 
-        if (!getBool(json, "confirm_accurate")) {
-            errors.add("Must confirm accuracy");
-        }
-        if (!getBool(json, "agree_privacy")) {
-            errors.add("Must agree to privacy policy");
-        }
+        if (!getBool(json, "confirm_accurate")) errors.add("Must confirm accuracy");
+        if (!getBool(json, "agree_privacy")) errors.add("Must agree to privacy policy");
 
         String registrant = getStr(json, "registrant");
         if ("another".equals(registrant)) {
@@ -202,9 +191,7 @@ public class RegistrationFunction {
 
     private void requireNonBlank(JsonObject j, String field, String msg, List<String> errors) {
         String val = getStr(j, field);
-        if (val == null || val.isBlank()) {
-            errors.add(msg);
-        }
+        if (val == null || val.isBlank()) errors.add(msg);
     }
 
     private String getStr(JsonObject j, String field) {
@@ -235,9 +222,7 @@ public class RegistrationFunction {
 
     private void addCorsHeaders(HttpResponseMessage.Builder builder, HttpRequestMessage<?> request) {
         String origin = request.getHeaders() != null ? request.getHeaders().get("Origin") : null;
-        if (origin == null || origin.isBlank()) {
-            origin = "*";
-        }
+        if (origin == null || origin.isBlank()) origin = "*";
         builder.header("Access-Control-Allow-Origin", origin)
                .header("Vary", "Origin")
                .header("Access-Control-Allow-Methods", "POST, OPTIONS")
@@ -248,9 +233,7 @@ public class RegistrationFunction {
     private String getHeaderIgnoreCase(Map<String, String> headers, String name) {
         if (headers == null || name == null) return null;
         for (Map.Entry<String, String> e : headers.entrySet()) {
-            if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) {
-                return e.getValue();
-            }
+            if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
         return null;
     }
