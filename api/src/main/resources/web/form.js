@@ -229,6 +229,14 @@
         })
         .then(function (result) {
           if (result.status === 201) {
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: "booking_request",
+              booking_details: {
+                patient_type: patientTypeValue
+              }
+            });
+
             var redirect = result.data.redirect_url;
             if (redirect) {
               window.location.href = redirect;
