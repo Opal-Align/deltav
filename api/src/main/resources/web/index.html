@@ -14,118 +14,203 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
 </head>
 <body>
 <!-- Google Tag Manager (noscript) -->
 <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-MBGGJ2K2"
 height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <!-- End Google Tag Manager (noscript) -->
+
 <div class="page">
-  <main class="form-card">
-    <header class="intro">
-      <h1>Welcome!</h1>
-      <p class="intro-text">
-        To get started, please complete this registration form. Providing accurate information helps us prepare for your care and ensures a smooth experience. Your privacy is important to us, and all information is securely protected.
-      </p>
-    </header>
 
-    <form id="registration-form" class="form" novalidate>
-      <input type="hidden" name="next" id="next-url" value="" />
-
-      <section class="section">
-        <h2 class="section-title">Who is this registration for?</h2>
-        <div class="radio-group" role="group" aria-label="Who is this registration for?">
-          <label class="radio-label">
-            <input type="radio" name="registrant" value="myself" checked />
-            <span class="radio-text">Myself</span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="registrant" value="another" />
-            <span class="radio-text">Another patient</span>
-          </label>
-        </div>
-
-        <div id="relationship-fields" class="conditional-fields" hidden>
-          <label class="field-label" for="relationship">Relationship to patient</label>
-          <select id="relationship" name="relationship" class="input select" aria-describedby="err-relationship">
-            <option value="">Select relationship</option>
-            <option value="parent-guardian">Parent / Guardian</option>
-            <option value="spouse-partner">Spouse / Partner</option>
-            <option value="child">Child</option>
-            <option value="caregiver">Caregiver</option>
-            <option value="legal-representative">Legal Representative</option>
-            <option value="other">Other</option>
-          </select>
-          <span class="error-msg" id="err-relationship" role="alert"></span>
-          <div id="relationship-other-wrap" class="other-wrap" hidden>
-            <label class="field-label" for="relationship-other">Please specify</label>
-            <input type="text" id="relationship-other" name="relationship_other" class="input" placeholder="Other relationship" />
-            <span class="error-msg" id="err-relationship-other" role="alert"></span>
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">Patient Status</h2>
-        <div class="radio-group" role="group" aria-label="Are you a new or existing patient?">
-          <label class="radio-label">
-            <input type="radio" name="patient_type" value="new" checked />
-            <span class="radio-text">New patient</span>
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="patient_type" value="existing" />
-            <span class="radio-text">Existing patient</span>
-          </label>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">Patient Information</h2>
-        <div class="row">
-          <div class="field">
-            <label class="field-label" for="first-name">First Name</label>
-            <input type="text" id="first-name" name="first_name" class="input" required placeholder="First name" />
-            <span class="error-msg" id="err-first-name" role="alert"></span>
-          </div>
-          <div class="field">
-            <label class="field-label" for="middle-name">Middle Name <span class="optional">(optional)</span></label>
-            <input type="text" id="middle-name" name="middle_name" class="input" placeholder="Middle name" />
-          </div>
-        </div>
-        <div class="field">
-          <label class="field-label" for="last-name">Last Name</label>
-          <input type="text" id="last-name" name="last_name" class="input" required placeholder="Last name" />
-          <span class="error-msg" id="err-last-name" role="alert"></span>
-        </div>
-        <div class="field">
-          <label class="field-label" for="dob">Date of Birth</label>
-          <input type="text" id="dob" name="dob" class="input" required placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" />
-          <span class="error-msg" id="err-dob" role="alert"></span>
-        </div>
-      </section>
-
-      <section class="section section-consent">
-        <h2 class="section-title">Consent / Acknowledgement</h2>
-        <div class="checkbox-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="confirm-accurate" name="confirm_accurate" required />
-            <span class="checkbox-text">I confirm the information is accurate</span>
-          </label>
-          <span class="error-msg" id="err-confirm-accurate" role="alert"></span>
-          <label class="checkbox-label">
-            <input type="checkbox" id="agree-privacy" name="agree_privacy" required />
-            <span class="checkbox-text">I agree to <a href="#" class="link">privacy policy</a> / <a href="#" class="link">HIPAA notice</a></span>
-          </label>
-          <span class="error-msg" id="err-agree-privacy" role="alert"></span>
-        </div>
-      </section>
-
-      <div class="actions">
-        <button type="submit" class="btn btn-primary">Continue</button>
+  <aside class="brand-panel">
+    <div class="brand-content">
+      <div class="brand-logo">
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="44" height="44" rx="14" fill="rgba(255,255,255,0.15)"/>
+          <circle cx="22" cy="22" r="9" stroke="white" stroke-opacity="0.4" stroke-width="1.5"/>
+          <path d="M22 15v7l4.5 2.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="brand-name">DeltaV Health</span>
       </div>
-    </form>
+      <h2 class="brand-headline">Your care journey<br/>starts here.</h2>
+      <p class="brand-sub">Complete your registration in minutes and reserve your preferred appointment slots.</p>
+      <ul class="brand-perks">
+        <li>
+          <span class="perk-check">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Secure &amp; HIPAA-compliant
+        </li>
+        <li>
+          <span class="perk-check">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Takes less than 2 minutes
+        </li>
+        <li>
+          <span class="perk-check">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          Pick up to 3 preferred time slots
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="form-panel">
+    <div class="form-card">
+      <header class="intro">
+        <h1>Welcome!</h1>
+        <p class="intro-text">Please complete this registration form. Your privacy is important — all information is securely protected.</p>
+        <div id="prefill-notice" class="prefill-notice" hidden>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.5 4h4l-3.3 2.4 1.3 4L7 9 3.5 11.4l1.3-4L1.5 5h4L7 1z" fill="currentColor"/></svg>
+          We've pre-filled your details from your profile. Please review and confirm.
+        </div>
+      </header>
+
+      <form id="registration-form" class="form" novalidate>
+        <input type="hidden" name="next" id="next-url" value="" />
+
+        <section class="section" id="registrant-section">
+          <h2 class="section-title">Who is this registration for?</h2>
+          <div class="radio-group" role="group" aria-label="Who is this registration for?">
+            <label class="radio-label">
+              <input type="radio" name="registrant" value="myself" checked />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Myself</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="registrant" value="another" />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Another patient</span>
+            </label>
+          </div>
+
+          <div id="relationship-fields" class="conditional-fields" hidden>
+            <label class="field-label" for="relationship">Relationship to patient</label>
+            <select id="relationship" name="relationship" class="input select" aria-describedby="err-relationship">
+              <option value="">Select relationship</option>
+              <option value="parent-guardian">Parent / Guardian</option>
+              <option value="spouse-partner">Spouse / Partner</option>
+              <option value="child">Child</option>
+              <option value="caregiver">Caregiver</option>
+              <option value="legal-representative">Legal Representative</option>
+              <option value="other">Other</option>
+            </select>
+            <span class="error-msg" id="err-relationship" role="alert"></span>
+            <div id="relationship-other-wrap" class="other-wrap" hidden>
+              <label class="field-label" for="relationship-other">Please specify</label>
+              <input type="text" id="relationship-other" name="relationship_other" class="input" placeholder="Other relationship" />
+              <span class="error-msg" id="err-relationship-other" role="alert"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="patient-type-section">
+          <h2 class="section-title">Patient Status</h2>
+          <div class="radio-group" role="group" aria-label="Are you a new or existing patient?">
+            <label class="radio-label">
+              <input type="radio" name="patient_type" value="new" checked />
+              <span class="radio-custom"></span>
+              <span class="radio-text">New patient</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="patient_type" value="existing" />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Existing patient</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Patient Information</h2>
+          <div class="row">
+            <div class="field">
+              <label class="field-label" for="first-name">First Name</label>
+              <input type="text" id="first-name" name="first_name" class="input" required placeholder="First name" />
+              <span class="error-msg" id="err-first-name" role="alert"></span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="middle-name">Middle Name <span class="optional">(optional)</span></label>
+              <input type="text" id="middle-name" name="middle_name" class="input" placeholder="Middle name" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="last-name">Last Name</label>
+            <input type="text" id="last-name" name="last_name" class="input" required placeholder="Last name" />
+            <span class="error-msg" id="err-last-name" role="alert"></span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="dob">Date of Birth</label>
+            <input type="text" id="dob" name="dob" class="input" required placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" />
+            <span class="error-msg" id="err-dob" role="alert"></span>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">
+            Preferred Appointment Times
+            <span class="optional">(optional &mdash; pick up to 3)</span>
+          </h2>
+          <div class="calendar-wrap">
+            <div class="cal-header">
+              <button type="button" class="cal-nav" id="cal-prev" aria-label="Previous month">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M11 13l-4-4 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <span class="cal-month-label" id="cal-month-label"></span>
+              <button type="button" class="cal-nav" id="cal-next" aria-label="Next month">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M7 5l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="cal-slots-wrap" id="cal-slots-wrap" hidden>
+              <p class="cal-slots-date" id="cal-slots-date"></p>
+              <div class="cal-slots" id="cal-slots"></div>
+            </div>
+          </div>
+          <div class="selected-slots" id="selected-slots" hidden>
+            <p class="selected-slots-label">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 1v2M9 1v2M1 6h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Selected slots
+            </p>
+            <div class="slot-chips" id="slot-chips"></div>
+          </div>
+        </section>
+
+        <section class="section section-consent">
+          <h2 class="section-title">Consent / Acknowledgement</h2>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="confirm-accurate" name="confirm_accurate" required />
+              <span class="checkbox-custom">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="checkbox-text">I confirm the information is accurate</span>
+            </label>
+            <span class="error-msg" id="err-confirm-accurate" role="alert"></span>
+            <label class="checkbox-label">
+              <input type="checkbox" id="agree-privacy" name="agree_privacy" required />
+              <span class="checkbox-custom">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="checkbox-text">I agree to <a href="#" class="link">privacy policy</a> / <a href="#" class="link">HIPAA notice</a></span>
+            </label>
+            <span class="error-msg" id="err-agree-privacy" role="alert"></span>
+          </div>
+        </section>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">
+            Continue
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+      </form>
+    </div>
   </main>
+
 </div>
 <script>
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
