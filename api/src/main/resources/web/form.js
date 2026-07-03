@@ -136,11 +136,7 @@
   var DAY_SHORT   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MON_SHORT   = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  var TIME_SLOTS = [
-    "9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM",
-    "12:00 PM","12:30 PM",
-    "1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM"
-  ];
+  var TIME_SLOTS = ["AM", "PM"];
 
   function padZ(n) { return String(n).padStart(2, "0"); }
   function toDateStr(y, m, d) { return y + "-" + padZ(m) + "-" + padZ(d); }
@@ -180,6 +176,10 @@
     var firstWeekday = new Date(calYear, calMonth, 1).getDay();
     var daysInMonth  = new Date(calYear, calMonth + 1, 0).getDate();
     var today = new Date(); today.setHours(0, 0, 0, 0);
+    var maxDate = new Date(today); maxDate.setDate(maxDate.getDate() + 90);
+
+    var nextMonthStart = new Date(calYear, calMonth + 1, 1);
+    document.getElementById("cal-next").disabled = nextMonthStart > maxDate;
 
     for (var e = 0; e < firstWeekday; e++) {
       var empty = document.createElement("div");
@@ -195,7 +195,7 @@
       btn.className = "cal-cell";
       btn.textContent = day;
 
-      if (cellDate < today) {
+      if (cellDate < today || cellDate > maxDate) {
         btn.disabled = true;
         btn.classList.add("past");
       } else {
@@ -380,6 +380,9 @@
     if (selectedSlots.length > 0) {
       payload.preferred_slots = selectedSlots.map(function (s) { return s.date + " " + s.time; });
     }
+
+    var comments = document.getElementById("comments").value.trim();
+    if (comments) payload.comments = comments;
 
     if (window.DELTAV_TOKEN) {
       payload.registration_token = window.DELTAV_TOKEN;
