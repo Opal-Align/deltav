@@ -2,59 +2,21 @@ package com.opal.deltav;
 
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
-import com.azure.data.tables.TableClient;
-import com.azure.data.tables.TableServiceClient;
-import com.azure.data.tables.TableServiceClientBuilder;
-import com.azure.data.tables.models.TableEntity;
-import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.storage.StorageWriter;
+import com.opal.deltav.storage.StorageWriterFactory;
+import com.opal.deltav.streaming.MessagePublisher;
+import com.opal.deltav.streaming.MessagePublisherFactory;
 
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.logging.Logger;
 
 public class RegistrationFunction {
 
     private static final Gson gson = new Gson();
-    private static final String TABLE_NAME = "PatientRegistrations";
-    private static volatile TableClient tableClient;
-    private static final Object lock = new Object();
-
-    private static TableClient getTableClient(Logger logger) {
-        if (tableClient == null) {
-            synchronized (lock) {
-                if (tableClient == null) {
-                    String storageAccountName = System.getenv("STORAGE_ACCOUNT_NAME");
-                    String connStr = System.getenv("AzureWebJobsStorage");
-
-                    TableServiceClient serviceClient;
-                    if (storageAccountName != null && !storageAccountName.isBlank()) {
-                        logger.info("Initializing Table Storage client with managed identity");
-                        String endpoint = "https://" + storageAccountName + ".table.core.windows.net";
-                        serviceClient = new TableServiceClientBuilder()
-                                .endpoint(endpoint)
-                                .credential(new DefaultAzureCredentialBuilder().build())
-                                .buildClient();
-                    } else if (connStr != null && !connStr.isBlank()) {
-                        logger.info("Initializing Table Storage client with connection string");
-                        serviceClient = new TableServiceClientBuilder()
-                                .connectionString(connStr)
-                                .buildClient();
-                    } else {
-                        throw new IllegalStateException("Neither STORAGE_ACCOUNT_NAME nor AzureWebJobsStorage is configured");
-                    }
-
-                    serviceClient.createTableIfNotExists(TABLE_NAME);
-                    tableClient = serviceClient.getTableClient(TABLE_NAME);
-                    logger.info("Table Storage client initialized successfully");
-                }
-            }
-        }
-        return tableClient;
-    }
 
     @FunctionName("register")
     public HttpResponseMessage run(
@@ -114,31 +76,34 @@ public class RegistrationFunction {
         }
 
         try {
-            TableClient client = getTableClient(logger);
+            // Build registration data
+            RegistrationData registrationData = RegistrationData.builder()
+                    .practiceId(getStr(json, "practice"))
+                    .registrant(getStr(json, "registrant"))
+                    .patientType(getStr(json, "patient_type"))
+                    .firstName(getStr(json, "first_name"))
+                    .lastName(getStr(json, "last_name"))
+                    .dob(getStr(json, "dob"))
+                    .confirmAccurate(getBool(json, "confirm_accurate"))
+                    .agreePrivacy(getBool(json, "agree_privacy"))
+                    .redirectUrl(getStr(json, "redirect_url"))
+                    .relationship(getStr(json, "relationship"))
+                    .relationshipOther(getStr(json, "relationship_other"))
+                    .build();
 
-            String practiceId = getStr(json, "practice");
-            String monthYear = LocalDate.now().format(DateTimeFormatter.ofPattern("MM-yyyy"));
-            String partitionKey = practiceId + "_" + monthYear;
-            String rowKey = UUID.randomUUID().toString();
-            logger.info("Storing registration: partitionKey=" + partitionKey + ", rowKey=" + rowKey);
+            // Write to storage using factory
+            StorageWriter storageWriter = StorageWriterFactory.getWriter();
+            logger.info("Using storage type: " + storageWriter.getType());
+            String rowKey = storageWriter.write(registrationData, logger);
 
-            TableEntity entity = new TableEntity(partitionKey, rowKey)
-                    .addProperty("practice", practiceId)
-                    .addProperty("registrant", getStr(json, "registrant"))
-                    .addProperty("patientType", getStr(json, "patient_type"))
-                    .addProperty("firstName", getStr(json, "first_name"))
-                    .addProperty("lastName", getStr(json, "last_name"))
-                    .addProperty("dob", getStr(json, "dob"))
-                    .addProperty("confirmAccurate", getBool(json, "confirm_accurate"))
-                    .addProperty("agreePrivacy", getBool(json, "agree_privacy"))
-                    .addProperty("redirectUrl", getStr(json, "redirect_url"))
-                    .addProperty("relationship", getStr(json, "relationship"))
-                    .addProperty("relationshipOther", getStr(json, "relationship_other"))
-                    .addProperty("submittedAt", OffsetDateTime.now().toString());
+            // Publish to streaming service using factory
+            MessagePublisher publisher = MessagePublisherFactory.getPublisher();
+            if (MessagePublisherFactory.isStreamingEnabled()) {
+                logger.info("Publishing to streaming service: " + publisher.getType());
+                publisher.publish(registrationData, logger);
+            }
 
-            client.createEntity(entity);
-            logger.info("Registration stored successfully: " + partitionKey + "/" + rowKey);
-
+            String practiceId = registrationData.getPracticeId();
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
@@ -150,7 +115,7 @@ public class RegistrationFunction {
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
         } catch (Exception e) {
-            logger.severe("Table Storage error: " + e.getClass().getName() + " - " + e.getMessage());
+            logger.severe("Storage error: " + e.getClass().getName() + " - " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
         }
