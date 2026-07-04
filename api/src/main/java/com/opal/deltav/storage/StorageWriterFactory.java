@@ -50,8 +50,7 @@ public class StorageWriterFactory {
     private static StorageWriter createWriter(StorageType type) {
         return switch (type) {
             case TABLE_STORAGE -> new TableStorageWriter();
-            case BLOB_STORAGE -> new BlobStorageWriter();
-            case POSTGRES, COSMOS_DB -> throw new UnsupportedOperationException(
+            case POSTGRES, BLOB_STORAGE, COSMOS_DB -> throw new UnsupportedOperationException(
                     "Storage type " + type + " is not yet implemented");
         };
     }
