@@ -1,0 +1,61 @@
+# Deploy per client - pass CLIENT_ID at deployment time
+# Usage: export CLIENT_ID=client1 && envsubst < deployment.yaml | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-worker-${CLIENT_ID}
+  labels:
+    app: queue-worker
+    client: ${CLIENT_ID}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: queue-worker
+      client: ${CLIENT_ID}
+  template:
+    metadata:
+      labels:
+        app: queue-worker
+        client: ${CLIENT_ID}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: queue-worker-sa
+      containers:
+        - name: worker
+          image: ${ACR_NAME}.azurecr.io/queue-worker-python:latest
+          env:
+            - name: CLIENT_ID
+              value: "${CLIENT_ID}"
+            - name: QUEUE_NAME
+              value: "${QUEUE_NAME}"
+            # Managed Identity for Queue (preferred)
+            - name: AZURE_CLIENT_ID
+              value: "${MANAGED_IDENTITY_CLIENT_ID}"
+            - name: AZURE_STORAGE_ACCOUNT_URL
+              value: "https://${STORAGE_ACCOUNT}.queue.core.windows.net"
+            # Fallback: Connection string (optional, used if MI fails)
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: queue-worker-${CLIENT_ID}-secrets
+                  key: AZURE_STORAGE_CONNECTION_STRING
+                  optional: true
+            # SQL Server (SQL Authentication)
+            - name: SQL_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: queue-worker-${CLIENT_ID}-secrets
+                  key: SQL_CONNECTION_STRING
+          envFrom:
+            - configMapRef:
+                name: queue-worker-config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
