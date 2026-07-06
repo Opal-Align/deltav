@@ -211,11 +211,35 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </main>
 
 </div>
+
+<div id="otp-modal" class="otp-modal" hidden aria-hidden="true">
+  <div class="otp-modal-backdrop"></div>
+  <div class="otp-modal-card" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title">
+    <h2 id="otp-modal-title" class="otp-modal-title">Verify your mobile number</h2>
+    <p class="otp-modal-sub">We sent a one-time code to the mobile number on file. The code expires in 1 minute.</p>
+    <p id="otp-phone-masked" class="otp-phone-masked" hidden></p>
+
+    <div id="otp-step-verify" class="otp-step">
+      <div class="field">
+        <label class="field-label" for="otp-code">Enter OTP</label>
+        <input type="text" id="otp-code" class="input otp-input" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
+        <span class="error-msg" id="err-otp" role="alert"></span>
+      </div>
+      <p id="otp-timer" class="otp-timer" hidden>Code expires in <span id="otp-timer-value">60</span>s</p>
+      <p id="otp-poc-hint" class="otp-poc-hint" hidden></p>
+      <button type="button" id="otp-verify-btn" class="btn btn-primary btn-block">Verify &amp; Continue</button>
+      <button type="button" id="otp-resend-btn" class="btn btn-ghost btn-block" disabled>Resend OTP</button>
+    </div>
+
+    <button type="button" id="otp-cancel-btn" class="btn btn-ghost btn-block otp-cancel">Cancel</button>
+  </div>
+</div>
+
 <script>
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
     window.DELTAV_API_URL = "http://localhost:7071";
   }
 </script>
-<script src="form.js?v=2"></script>
+<script src="form.js?v=7"></script>
 </body>
 </html>

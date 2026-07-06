@@ -113,6 +113,19 @@ public class RegistrationFunction {
                     Map.of("errors", errors));
         }
 
+        String sessionId = getStr(json, "session_id");
+        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        if (session == null || !session.isOtpVerified()) {
+            logger.warning("Registration rejected: session not OTP-verified");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "otp_not_verified"));
+        }
+        if (!Objects.equals(session.practiceId, getStr(json, "practice"))) {
+            logger.warning("Registration rejected: session practice mismatch");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "invalid_session"));
+        }
+
         try {
             TableClient client = getTableClient(logger);
 
@@ -129,6 +142,9 @@ public class RegistrationFunction {
                     .addProperty("firstName", getStr(json, "first_name"))
                     .addProperty("lastName", getStr(json, "last_name"))
                     .addProperty("dob", getStr(json, "dob"))
+                    .addProperty("mobile", session.phoneE164)
+                    .addProperty("patientKey", session.patientKey)
+                    .addProperty("sessionId", sessionId)
                     .addProperty("confirmAccurate", getBool(json, "confirm_accurate"))
                     .addProperty("agreePrivacy", getBool(json, "agree_privacy"))
                     .addProperty("redirectUrl", getStr(json, "redirect_url"))

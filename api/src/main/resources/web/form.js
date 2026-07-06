@@ -346,11 +346,127 @@
     return valid;
   }
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (!validate()) return;
+  // ── Submit + OTP verification ─────────────────────────────────────────────
+  var pendingPayload = null;
+  var sessionId = null;
+  var otpTimerId = null;
+  var resendLocked = false;
 
+  var otpModal = document.getElementById("otp-modal");
+  var otpInput = document.getElementById("otp-code");
+  var otpVerifyBtn = document.getElementById("otp-verify-btn");
+  var otpResendBtn = document.getElementById("otp-resend-btn");
+  var otpCancelBtn = document.getElementById("otp-cancel-btn");
+  var otpStepVerify = document.getElementById("otp-step-verify");
+  var otpTimerWrap = document.getElementById("otp-timer");
+  var otpTimerValue = document.getElementById("otp-timer-value");
+  var otpPocHint = document.getElementById("otp-poc-hint");
+  var otpPhoneMasked = document.getElementById("otp-phone-masked");
+
+  function authHeaders() {
+    return {
+      "Content-Type": "application/json",
+      "X-Registration-Token": window.DELTAV_TOKEN || ""
+    };
+  }
+
+  function showOtpError(id, message) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = message || "";
+  }
+
+  function clearOtpErrors() {
+    showOtpError("err-otp", "");
+  }
+
+  function stopOtpTimer() {
+    if (otpTimerId) {
+      clearInterval(otpTimerId);
+      otpTimerId = null;
+    }
+    if (otpTimerWrap) otpTimerWrap.hidden = true;
+  }
+
+  function setResendState(enabled, secondsRemaining) {
+    if (!otpResendBtn) return;
+    var canEnable = enabled && !resendLocked;
+    otpResendBtn.disabled = !canEnable;
+    if (!canEnable && secondsRemaining > 0) {
+      otpResendBtn.textContent = "Resend OTP in " + secondsRemaining + "s";
+    } else {
+      otpResendBtn.textContent = "Resend OTP";
+    }
+  }
+
+  function lockResend(seconds) {
+    resendLocked = true;
+    setResendState(false, seconds);
+  }
+
+  function unlockResend() {
+    resendLocked = false;
+    setResendState(true, 0);
+  }
+
+  function startOtpTimer(seconds) {
+    stopOtpTimer();
+    var remaining = seconds;
+    lockResend(remaining);
+    if (otpTimerValue) otpTimerValue.textContent = String(remaining);
+    if (otpTimerWrap) otpTimerWrap.hidden = false;
+    otpTimerId = setInterval(function () {
+      remaining -= 1;
+      if (otpTimerValue) otpTimerValue.textContent = String(Math.max(0, remaining));
+      if (remaining > 0) {
+        lockResend(remaining);
+      } else {
+        stopOtpTimer();
+        unlockResend();
+        showOtpError("err-otp", "OTP expired. Please resend a new code.");
+      }
+    }, 1000);
+  }
+
+  function openOtpModal(phoneMasked) {
+    clearOtpErrors();
+    stopOtpTimer();
+    resendLocked = false;
+    if (otpResendBtn) {
+      otpResendBtn.disabled = true;
+      otpResendBtn.textContent = "Resend OTP";
+    }
+    if (otpInput) otpInput.value = "";
+    if (otpPocHint) {
+      otpPocHint.hidden = true;
+      otpPocHint.textContent = "";
+    }
+    if (otpPhoneMasked) {
+      if (phoneMasked) {
+        otpPhoneMasked.textContent = "Code sent to " + phoneMasked;
+        otpPhoneMasked.hidden = false;
+      } else {
+        otpPhoneMasked.hidden = true;
+        otpPhoneMasked.textContent = "";
+      }
+    }
+    if (otpStepVerify) otpStepVerify.hidden = false;
+    if (otpModal) {
+      otpModal.hidden = false;
+      otpModal.setAttribute("aria-hidden", "false");
+    }
+    if (otpInput) otpInput.focus();
+  }
+
+  function closeOtpModal() {
+    stopOtpTimer();
+    if (otpModal) {
+      otpModal.hidden = true;
+      otpModal.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function buildPayload() {
     var registrantChecked  = form.querySelector('input[name="registrant"]:checked');
     var patientTypeChecked = form.querySelector('input[name="patient_type"]:checked');
     var registrantValue    = registrantChecked  ? registrantChecked.value  : "myself";
@@ -388,16 +504,17 @@
       payload.registration_token = window.DELTAV_TOKEN;
     }
 
+    return payload;
+  }
+
+  function submitRegistration(payload) {
     var submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.textContent = "Submitting…";
 
-    fetch(API_BASE + "/api/register", {
+    return fetch(API_BASE + "/api/register", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Registration-Token": window.DELTAV_TOKEN || ""
-      },
+      headers: authHeaders(),
       body: JSON.stringify(payload)
     })
       .then(function (res) {
@@ -405,10 +522,11 @@
       })
       .then(function (result) {
         if (result.status === 201) {
+          closeOtpModal();
           window.dataLayer = window.dataLayer || [];
           window.dataLayer.push({
             event: "booking_request",
-            booking_details: { patient_type: patientTypeValue }
+            booking_details: { patient_type: payload.patient_type }
           });
           var redirect = result.data.redirect_url;
           if (redirect) {
@@ -431,6 +549,186 @@
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'Continue <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       });
+  }
+
+  function verifyIdentityAndSendOtp() {
+    if (!pendingPayload) return;
+
+    var submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Verifying…";
+
+    fetch((API_BASE || window.location.origin) + "/api/identity/verify", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        practice: pendingPayload.practice,
+        first_name: pendingPayload.first_name,
+        last_name: pendingPayload.last_name,
+        dob: pendingPayload.dob
+      })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { status: res.status, data: data }; });
+      })
+      .then(function (result) {
+        if (result.status === 200 && result.data.success) {
+          sessionId = result.data.session_id;
+          openOtpModal(result.data.phone_masked);
+          startOtpTimer(result.data.expires_in_seconds || 60);
+          if (result.data.poc_otp && otpPocHint) {
+            otpPocHint.hidden = false;
+            otpPocHint.textContent = "POC: Your OTP is " + result.data.poc_otp;
+          }
+          return;
+        }
+        if (result.data.error === "identity_mismatch") {
+          alert(result.data.message || "We could not verify your information. Please check your details and try again.");
+          return;
+        }
+        if (result.data.error === "no_phone_on_file") {
+          alert(result.data.message || "No mobile number is on file. Please contact the office.");
+          return;
+        }
+        alert("Could not verify your identity. Please try again.");
+      })
+      .catch(function () {
+        alert("Network error. Please check your connection and try again.");
+      })
+      .finally(function () {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Continue <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      });
+  }
+
+  function sendOtp() {
+    clearOtpErrors();
+    if (!sessionId) {
+      showOtpError("err-otp", "Session expired. Please start again.");
+      return;
+    }
+    if (otpResendBtn && otpResendBtn.disabled) {
+      return;
+    }
+
+    var sendSucceeded = false;
+    if (otpResendBtn) {
+      otpResendBtn.disabled = true;
+      otpResendBtn.textContent = "Sending…";
+    }
+
+    fetch((API_BASE || window.location.origin) + "/api/otp/send", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ session_id: sessionId })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { status: res.status, data: data }; });
+      })
+      .then(function (result) {
+        if (result.status === 429 && result.data.error === "resend_throttled") {
+          showOtpError("err-otp", "Please wait " + (result.data.retry_after_seconds || 60) + "s before resending.");
+          return;
+        }
+        if (result.status === 429 && result.data.error === "send_limit_reached") {
+          showOtpError("err-otp", "Maximum resend limit reached. Please refresh and try again.");
+          return;
+        }
+        if (result.status !== 200 || !result.data.success) {
+          showOtpError("err-otp", "Could not resend OTP. Please try again.");
+          return;
+        }
+
+        if (otpInput) {
+          otpInput.value = "";
+          otpInput.focus();
+        }
+        sendSucceeded = true;
+        showOtpError("err-otp", "");
+        startOtpTimer(result.data.expires_in_seconds || 60);
+        if (result.data.poc_otp && otpPocHint) {
+          otpPocHint.hidden = false;
+          otpPocHint.textContent = "POC: Your OTP is " + result.data.poc_otp;
+        }
+      })
+      .catch(function () {
+        showOtpError("err-otp", "Network error. Please try again.");
+      })
+      .finally(function () {
+        if (!sendSucceeded && !otpTimerId) {
+          unlockResend();
+        }
+        if (otpResendBtn) {
+          otpResendBtn.textContent = "Resend OTP";
+        }
+      });
+  }
+
+  function verifyOtp() {
+    clearOtpErrors();
+    var otp = (otpInput ? otpInput.value : "").trim();
+
+    if (!sessionId) {
+      showOtpError("err-otp", "Session expired. Please start again.");
+      return;
+    }
+    if (!/^\d{6}$/.test(otp)) {
+      showOtpError("err-otp", "Please enter the 6-digit OTP.");
+      return;
+    }
+
+    otpVerifyBtn.disabled = true;
+    otpVerifyBtn.textContent = "Verifying…";
+
+    fetch((API_BASE || window.location.origin) + "/api/otp/verify", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ session_id: sessionId, otp: otp })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { status: res.status, data: data }; });
+      })
+      .then(function (result) {
+        if (result.data.refresh_required || result.data.error === "too_many_attempts") {
+          alert("Too many incorrect attempts. The page will refresh.");
+          window.location.reload();
+          return;
+        }
+        if (result.data.verified) {
+          stopOtpTimer();
+          if (pendingPayload) {
+            pendingPayload.session_id = sessionId;
+            return submitRegistration(pendingPayload);
+          }
+          return;
+        }
+        if (result.data.error === "otp_expired") {
+          showOtpError("err-otp", "OTP expired. Please resend a new code.");
+          return;
+        }
+        var remaining = result.data.attempts_remaining;
+        showOtpError("err-otp", typeof remaining === "number"
+          ? "Incorrect OTP. " + remaining + " attempt(s) remaining."
+          : "Incorrect OTP. Please try again.");
+      })
+      .catch(function () {
+        showOtpError("err-otp", "Network error. Please try again.");
+      })
+      .finally(function () {
+        otpVerifyBtn.disabled = false;
+        otpVerifyBtn.textContent = "Verify & Continue";
+      });
+  }
+
+  if (otpResendBtn) otpResendBtn.addEventListener("click", sendOtp);
+  if (otpVerifyBtn) otpVerifyBtn.addEventListener("click", verifyOtp);
+  if (otpCancelBtn) otpCancelBtn.addEventListener("click", closeOtpModal);
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!validate()) return;
+    pendingPayload = buildPayload();
+    verifyIdentityAndSendOtp();
   });
 
   // ── Init ──────────────────────────────────────────────────────────────────
