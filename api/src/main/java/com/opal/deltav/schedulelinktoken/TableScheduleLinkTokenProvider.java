@@ -168,7 +168,7 @@ public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider
                         serviceClient.listTables().forEach(table -> {
                             logger.info("Table name: " + table.getName());
                         });
-                    } else if (connStr != null && !connStr.isBlank()) { 
+                    } else if (connStr != null && !connStr.isBlank()) {
                         logger.info("Initializing Table Storage client with connection string");
                         serviceClient = new TableServiceClientBuilder()
                                 .connectionString(connStr)
