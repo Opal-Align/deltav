@@ -171,16 +171,16 @@ public class StaticFileFunction {
 
         // Validate token against table storage
         ScheduleLinkTokenProvider provider = ScheduleLinkTokenProviderFactory.getProvider();
-        boolean tokenExists = provider.exists(token, logger);
+        ScheduleLinkTokenProvider.ValidationResult validationResult = provider.validateToken(token, logger);
 
-        if (!tokenExists) {
-            logger.warning("Token not found or invalid: " + token);
+        if (!validationResult.valid) {
+            logger.warning("Token validation failed for '" + token + "': " + validationResult.error);
             return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
                     .header("Content-Type", "text/html; charset=utf-8")
                     .body("<html><body><h1>Invalid or Expired Link</h1><p>This link is no longer valid. Please request a new link.</p></body></html>")).build();
         }
 
-        logger.info("Token validated successfully: " + token);
+        logger.info("Token validated successfully: " + token + ", practiceId=" + validationResult.token.getPracticeId());
 
         // Generate session ID
         String sessionId = UUID.randomUUID().toString();

@@ -49,6 +49,54 @@ public interface ScheduleLinkTokenProvider {
     boolean exists(String key, Logger logger);
 
     /**
+     * Get token as ScheduleLinkToken object.
+     *
+     * @param key the key/identifier
+     * @param logger the logger
+     * @return ScheduleLinkToken or null if not found
+     */
+    default ScheduleLinkToken getToken(String key, Logger logger) {
+        return getData(key, ScheduleLinkToken::fromMap, logger);
+    }
+
+    /**
+     * Validate token - checks existence, expiry, status, and revocation.
+     *
+     * @param key the key/identifier
+     * @param logger the logger
+     * @return ValidationResult with valid flag and error message
+     */
+    default ValidationResult validateToken(String key, Logger logger) {
+        ScheduleLinkToken token = getToken(key, logger);
+        if (token == null) {
+            return new ValidationResult(false, "Token not found");
+        }
+        if (!token.isValid()) {
+            return new ValidationResult(false, token.getValidationError());
+        }
+        return new ValidationResult(true, null, token);
+    }
+
+    /**
+     * Result of token validation.
+     */
+    class ValidationResult {
+        public final boolean valid;
+        public final String error;
+        public final ScheduleLinkToken token;
+
+        public ValidationResult(boolean valid, String error) {
+            this(valid, error, null);
+        }
+
+        public ValidationResult(boolean valid, String error, ScheduleLinkToken token) {
+            this.valid = valid;
+            this.error = error;
+            this.token = token;
+        }
+    }
+
+    /**
      * Returns the provider type identifier.
      */
     ScheduleLinkTokenProviderType getType();
