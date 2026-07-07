@@ -1,10 +1,11 @@
-package com.opal.deltav;
+package com.opal.deltav.function;
 
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
 import com.opal.deltav.session.SessionManager;
+import com.opal.deltav.util.TokenUtil;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

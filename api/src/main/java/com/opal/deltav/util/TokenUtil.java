@@ -1,4 +1,4 @@
-package com.opal.deltav;
+package com.opal.deltav.util;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;

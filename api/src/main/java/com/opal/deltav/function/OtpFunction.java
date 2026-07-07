@@ -1,9 +1,14 @@
-package com.opal.deltav;
+package com.opal.deltav.function;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
+import com.opal.deltav.otp.RedisOtpService;
+import com.opal.deltav.otp.RedisSessionService;
+import com.opal.deltav.otp.RegistrationSession;
+import com.opal.deltav.otp.SmsOtpSender;
+import com.opal.deltav.util.PhoneUtil;
 
 import java.util.HashMap;
 import java.util.Map;

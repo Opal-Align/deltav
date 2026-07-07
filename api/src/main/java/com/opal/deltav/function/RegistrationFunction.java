@@ -1,15 +1,17 @@
-package com.opal.deltav;
+package com.opal.deltav.function;
 
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.opal.deltav.config.PracticeConfig;
 import com.opal.deltav.model.RegistrationData;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
 import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
+import com.opal.deltav.util.TokenUtil;
 
 import java.time.LocalDate;
 import java.util.*;

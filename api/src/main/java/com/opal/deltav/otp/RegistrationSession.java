@@ -1,4 +1,4 @@
-package com.opal.deltav;
+package com.opal.deltav.otp;
 
 public final class RegistrationSession {
 

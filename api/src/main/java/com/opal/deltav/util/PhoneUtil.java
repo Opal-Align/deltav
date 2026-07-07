@@ -1,4 +1,4 @@
-package com.opal.deltav;
+package com.opal.deltav.util;
 
 /**
  * Phone number normalization and E.164 formatting for OTP SMS (US numbers).

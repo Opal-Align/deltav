@@ -1,9 +1,10 @@
-package com.opal.deltav;
+package com.opal.deltav.otp;
 
 import com.azure.communication.sms.SmsClient;
 import com.azure.communication.sms.SmsClientBuilder;
 import com.azure.communication.sms.models.SmsSendOptions;
 import com.azure.communication.sms.models.SmsSendResult;
+import com.opal.deltav.util.PhoneUtil;
 
 import java.util.logging.Logger;
 

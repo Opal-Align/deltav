@@ -7,9 +7,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Factory for creating MessagePublisher instances based on configuration.
  *
  * Configure via environment variable STREAMING_TYPE:
- * - NONE (default) - No streaming
+ * - QUEUE_STORAGE (default) - Publish to Azure Queue Storage
  * - EVENT_HUB - Publish to Azure Event Hub
- * - QUEUE_STORAGE - Publish to Azure Queue Storage
+ * - NONE - No streaming
  */
 public class MessagePublisherFactory {
 
@@ -20,7 +20,7 @@ public class MessagePublisherFactory {
 
     /**
      * Gets the MessagePublisher based on the STREAMING_TYPE environment variable.
-     * Defaults to NONE (no streaming) if not configured.
+     * Defaults to QUEUE_STORAGE if not configured.
      */
     public static MessagePublisher getPublisher() {
         String streamingTypeEnv = System.getenv("STREAMING_TYPE");
@@ -46,12 +46,12 @@ public class MessagePublisherFactory {
 
     private static StreamingType parseStreamingType(String value) {
         if (value == null || value.isBlank()) {
-            return StreamingType.NONE;
+            return StreamingType.QUEUE_STORAGE;
         }
         try {
             return StreamingType.valueOf(value.toUpperCase().trim());
         } catch (IllegalArgumentException e) {
-            return StreamingType.NONE;
+            return StreamingType.QUEUE_STORAGE;
         }
     }
 
