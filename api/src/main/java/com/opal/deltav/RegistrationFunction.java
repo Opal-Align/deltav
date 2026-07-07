@@ -5,6 +5,7 @@ import com.microsoft.azure.functions.annotation.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
 
@@ -64,6 +65,20 @@ public class RegistrationFunction {
             logger.warning("Registration rejected due to token error: " + tokenResult.error);
             return jsonResponse(request, HttpStatus.UNAUTHORIZED,
                     Map.of("error", tokenResult.error));
+        }
+
+        // Validate session from cookie
+        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
+        if (sessionId == null || sessionId.isBlank()) {
+            logger.warning("Registration rejected: missing session cookie");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "Session required"));
+        }
+
+        if (!SessionManager.getInstance().isValidSession(sessionId, logger)) {
+            logger.warning("Registration rejected: invalid or expired session");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "Invalid or expired session"));
         }
 
         List<String> errors = validate(json);
@@ -189,6 +204,29 @@ public class RegistrationFunction {
         for (Map.Entry<String, String> e : headers.entrySet()) {
             if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
+        return null;
+    }
+
+    /**
+     * Extract session ID from Cookie header.
+     * Cookie format: "DELTAV_SESSION=uuid; other=value"
+     */
+    private String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
+        String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
+        if (cookieHeader == null || cookieHeader.isBlank()) {
+            return null;
+        }
+
+        // Parse cookies: "name1=value1; name2=value2"
+        for (String cookie : cookieHeader.split(";")) {
+            String trimmed = cookie.trim();
+            if (trimmed.startsWith("DELTAV_SESSION=")) {
+                String sessionId = trimmed.substring("DELTAV_SESSION=".length()).trim();
+                logger.info("Found session ID in cookie");
+                return sessionId;
+            }
+        }
+
         return null;
     }
 }
