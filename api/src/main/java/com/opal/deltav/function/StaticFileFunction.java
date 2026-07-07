@@ -181,18 +181,17 @@ public class StaticFileFunction {
                     .body("<html><body><h1>Invalid or Expired Link</h1><p>This link is no longer valid. Please request a new link.</p></body></html>")).build();
         }
 
-        logger.info("Token validated successfully: " + token + ", practiceId=" + validationResult.token.getPracticeId());
+        String practiceId = String.valueOf(validationResult.token.getPracticeId());
+        logger.info("Token validated successfully: " + token + ", practiceId=" + practiceId);
 
-        // Generate session ID
-        String sessionId = UUID.randomUUID().toString();
+        // Create session with practice ID and token
+        String sessionId = SessionManager.getInstance().createSession(practiceId, token, logger);
+
         long sessionTtlSeconds = 1800; // 30 minutes default
         String sessionTtlEnv = System.getenv("SESSION_TTL_SECONDS");
         if (sessionTtlEnv != null && !sessionTtlEnv.isBlank()) {
             try { sessionTtlSeconds = Math.max(300, Long.parseLong(sessionTtlEnv)); } catch (Exception ignore) {}
         }
-
-        // Store session
-        SessionManager.getInstance().storeSession(sessionId, token, sessionTtlSeconds, logger);
 
         // Serve index.html with registration token
         try {

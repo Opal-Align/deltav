@@ -34,44 +34,43 @@ public class OtpFunction {
             return corsResponse(request, HttpStatus.NO_CONTENT, null);
         }
 
+        // Validate session from cookie
+        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
+        if (sessionId == null || sessionId.isBlank()) {
+            logger.warning("OTP send rejected: missing session cookie");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
+        }
+
+        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        if (session == null) {
+            logger.warning("OTP send rejected: invalid session " + sessionId);
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
+        }
+
         JsonObject json = parseJson(request, logger);
         if (json == null) {
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
-        String practice = getString(json, "practice");
         String mobile = getString(json, "mobile");
-        String sessionId = getString(json, "session_id");
 
         try {
-            RegistrationSession session;
             boolean enforceCooldown;
 
-            if (sessionId == null || sessionId.isBlank()) {
-                String normalizedPractice = RedisOtpService.normalizePracticeId(practice);
-                if (normalizedPractice == null) {
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_practice"));
+            // If session already has mobile bound, this is a resend
+            if (session.isMobileBound()) {
+                if (session.isOtpVerified()) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
                 }
+                enforceCooldown = true;
+            } else {
+                // First time - bind mobile to session
                 String phoneE164 = PhoneUtil.toE164(mobile);
                 if (phoneE164 == null) {
                     return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
                 }
-                sessionId = RedisSessionService.createSession(practice);
-                session = RedisSessionService.bindMobile(sessionId, normalizedPractice, phoneE164);
+                session = RedisSessionService.bindMobile(sessionId, session.practiceId, phoneE164);
                 enforceCooldown = false;
-            } else {
-                session = RedisSessionService.getSession(sessionId);
-                if (session == null || !session.isMobileBound()) {
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_session"));
-                }
-                if (session.isOtpVerified()) {
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
-                }
-                if (practice != null && !practice.isBlank()
-                        && !practice.equals(session.practiceId)) {
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_session"));
-                }
-                enforceCooldown = true;
             }
 
             return deliverOtp(request, logger, session, enforceCooldown);
@@ -99,12 +98,35 @@ public class OtpFunction {
             return corsResponse(request, HttpStatus.NO_CONTENT, null);
         }
 
+        // Validate session from cookie
+        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
+        if (sessionId == null || sessionId.isBlank()) {
+            logger.warning("OTP verify rejected: missing session cookie");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
+        }
+
+        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        if (session == null) {
+            logger.warning("OTP verify rejected: invalid session " + sessionId);
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
+        }
+
+        if (!session.isMobileBound()) {
+            logger.warning("OTP verify rejected: session not bound to mobile " + sessionId);
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Mobile not verified for session"));
+        }
+
+        if (session.isOtpVerified()) {
+            return jsonResponse(request, HttpStatus.OK, Map.of(
+                    "verified", true,
+                    "session_state", RegistrationSession.STATE_OTP_VERIFIED));
+        }
+
         JsonObject json = parseJson(request, logger);
         if (json == null) {
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
-        String sessionId = getString(json, "session_id");
         String otp = getString(json, "otp");
 
         try {
@@ -221,5 +243,31 @@ public class OtpFunction {
                 .header("Access-Control-Allow-Methods", "POST, OPTIONS")
                 .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Registration-Token")
                 .header("Access-Control-Max-Age", "3600");
+    }
+
+    private static String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
+        String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
+        if (cookieHeader == null || cookieHeader.isBlank()) {
+            return null;
+        }
+
+        for (String cookie : cookieHeader.split(";")) {
+            String trimmed = cookie.trim();
+            if (trimmed.startsWith("DELTAV_SESSION=")) {
+                String sessionId = trimmed.substring("DELTAV_SESSION=".length()).trim();
+                logger.info("Found session ID in cookie");
+                return sessionId;
+            }
+        }
+
+        return null;
+    }
+
+    private static String getHeaderIgnoreCase(Map<String, String> headers, String name) {
+        if (headers == null || name == null) return null;
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
+        }
+        return null;
     }
 }

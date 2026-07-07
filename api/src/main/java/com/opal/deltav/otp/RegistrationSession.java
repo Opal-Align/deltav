@@ -10,12 +10,18 @@ public final class RegistrationSession {
     public final String practiceId;
     public final String state;
     public final String phoneE164;
+    public final String token;
 
     public RegistrationSession(String sessionId, String practiceId, String state, String phoneE164) {
+        this(sessionId, practiceId, state, phoneE164, null);
+    }
+
+    public RegistrationSession(String sessionId, String practiceId, String state, String phoneE164, String token) {
         this.sessionId = sessionId;
         this.practiceId = practiceId;
         this.state = state;
         this.phoneE164 = phoneE164;
+        this.token = token;
     }
 
     public boolean isMobileBound() {

@@ -14,6 +14,10 @@ public final class RedisSessionService {
     private RedisSessionService() {}
 
     public static String createSession(String practiceId) {
+        return createSession(practiceId, null);
+    }
+
+    public static String createSession(String practiceId, String token) {
         String normalizedPractice = RedisOtpService.normalizePracticeId(practiceId);
         if (normalizedPractice == null) {
             throw new IllegalArgumentException("invalid_practice");
@@ -23,6 +27,9 @@ public final class RedisSessionService {
             Map<String, String> fields = new HashMap<>();
             fields.put("state", RegistrationSession.STATE_CREATED);
             fields.put("practice_id", normalizedPractice);
+            if (token != null && !token.isBlank()) {
+                fields.put("token", token);
+            }
             jedis.hset(sessionKey(sessionId), fields);
             jedis.expire(sessionKey(sessionId), SESSION_TTL_SECONDS);
         }
@@ -71,7 +78,29 @@ public final class RedisSessionService {
             String practiceId = fields.get("practice_id");
             String state = fields.getOrDefault("state", RegistrationSession.STATE_CREATED);
             String phoneE164 = fields.get("phone_e164");
-            return new RegistrationSession(sessionId, practiceId, state, phoneE164);
+            String token = fields.get("token");
+            return new RegistrationSession(sessionId, practiceId, state, phoneE164, token);
+        }
+    }
+
+    public static boolean exists(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return false;
+        try (Jedis jedis = RedisClients.getPool().getResource()) {
+            return jedis.exists(sessionKey(sessionId));
+        }
+    }
+
+    public static void invalidateSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return;
+        try (Jedis jedis = RedisClients.getPool().getResource()) {
+            jedis.del(sessionKey(sessionId));
+        }
+    }
+
+    public static void extendSession(String sessionId, int ttlSeconds) {
+        if (sessionId == null || sessionId.isBlank()) return;
+        try (Jedis jedis = RedisClients.getPool().getResource()) {
+            jedis.expire(sessionKey(sessionId), ttlSeconds);
         }
     }
 

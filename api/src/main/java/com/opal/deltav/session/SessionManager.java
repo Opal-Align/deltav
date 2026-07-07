@@ -1,9 +1,13 @@
 package com.opal.deltav.session;
 
+import com.opal.deltav.otp.RedisSessionService;
+import com.opal.deltav.otp.RegistrationSession;
+
 import java.util.logging.Logger;
 
 /**
  * Manages session storage and verification.
+ * Delegates to RedisSessionService for actual storage.
  */
 public class SessionManager {
 
@@ -25,38 +29,49 @@ public class SessionManager {
     }
 
     /**
-     * Store a new session.
+     * Create a new session for a practice.
      *
-     * @param sessionId the session ID
-     * @param ttlSeconds time to live in seconds
+     * @param practiceId the practice ID
      * @param logger the logger
+     * @return the created session ID
      */
-    public void storeSession(String sessionId, long ttlSeconds, Logger logger) {
-        // TODO: implement - store session in Azure Table Storage or cache
+    public String createSession(String practiceId, Logger logger) {
+        return createSession(practiceId, null, logger);
     }
 
     /**
-     * Store a session with associated data.
+     * Create a new session with associated token.
      *
-     * @param sessionId the session ID
+     * @param practiceId the practice ID
      * @param token the schedule link token associated with this session
-     * @param ttlSeconds time to live in seconds
      * @param logger the logger
+     * @return the created session ID
      */
-    public void storeSession(String sessionId, String token, long ttlSeconds, Logger logger) {
-        // TODO: implement - store session with token reference
+    public String createSession(String practiceId, String token, Logger logger) {
+        String sessionId = RedisSessionService.createSession(practiceId, token);
+        logger.info("Created session: " + sessionId + " for practice: " + practiceId);
+        return sessionId;
     }
 
     /**
-     * Verify if a session is valid.
+     * Verify if a session is valid (exists and OTP is verified).
      *
      * @param sessionId the session ID to verify
      * @param logger the logger
-     * @return true if session is valid and not expired
+     * @return true if session is valid and OTP verified
      */
     public boolean isValidSession(String sessionId, Logger logger) {
-        // TODO: implement - check if session exists and is not expired
-        return false;
+        if (sessionId == null || sessionId.isBlank()) {
+            return false;
+        }
+        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        if (session == null) {
+            logger.info("Session not found: " + sessionId);
+            return false;
+        }
+        boolean valid = session.isOtpVerified();
+        logger.info("Session " + sessionId + " valid=" + valid + " state=" + session.state);
+        return valid;
     }
 
     /**
@@ -67,8 +82,15 @@ public class SessionManager {
      * @return the associated token, or null if not found
      */
     public String getTokenForSession(String sessionId, Logger logger) {
-        // TODO: implement - retrieve token for session
-        return null;
+        if (sessionId == null || sessionId.isBlank()) {
+            return null;
+        }
+        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        if (session == null) {
+            logger.info("Session not found for token lookup: " + sessionId);
+            return null;
+        }
+        return session.token;
     }
 
     /**
@@ -78,7 +100,8 @@ public class SessionManager {
      * @param logger the logger
      */
     public void invalidateSession(String sessionId, Logger logger) {
-        // TODO: implement - remove session from storage
+        logger.info("Invalidating session: " + sessionId);
+        RedisSessionService.invalidateSession(sessionId);
     }
 
     /**
@@ -89,6 +112,7 @@ public class SessionManager {
      * @param logger the logger
      */
     public void extendSession(String sessionId, long ttlSeconds, Logger logger) {
-        // TODO: implement - update session expiry
+        logger.info("Extending session " + sessionId + " TTL to " + ttlSeconds + "s");
+        RedisSessionService.extendSession(sessionId, (int) ttlSeconds);
     }
 }
