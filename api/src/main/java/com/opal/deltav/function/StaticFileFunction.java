@@ -57,9 +57,13 @@ public class StaticFileFunction {
             return handleTokenRequest(request, pathSegment, logger);
         }
 
+        // Block direct access to root or index.html - must use valid token URL
         String resource = rawUrl;
-        if (resource.isEmpty() || "/".equals(resource)) {
-            resource = "/index.html";
+        if (resource.isEmpty() || "/".equals(resource) || resource.equals("/index.html")) {
+            logger.warning("Direct access to index.html blocked - token required");
+            return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                    .header("Content-Type", "text/html; charset=utf-8")
+                    .body("<html><body><h1>Invalid Link</h1><p>Please use the link provided to you to access this page.</p></body></html>")).build();
         }
 
         // Normalize and prevent directory traversal
@@ -70,7 +74,8 @@ public class StaticFileFunction {
                     .body(Map.of("error", "Invalid path"))).build();
         }
 
-        String classpathLocation = "/web" + resource; // resources are placed under src/main/resources/web
+        // Only serve CSS, JS and other static assets (not HTML)
+        String classpathLocation = "/web" + resource;
 
         try {
             byte[] data = readResource(classpathLocation);
@@ -80,42 +85,22 @@ public class StaticFileFunction {
             }
 
             String ext = getExtension(resource);
+
+            // Block direct access to any HTML file
+            if ("html".equals(ext)) {
+                logger.warning("Direct access to HTML file blocked: " + resource);
+                return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                        .body("Not found")).build();
+            }
+
             String contentType = CONTENT_TYPES.getOrDefault(ext, URLConnection.guessContentTypeFromName(resource));
             if (contentType == null || contentType.isBlank()) {
                 contentType = "application/octet-stream";
             }
 
-            // If serving index.html, inject a short-lived token
-            if ("html".equals(ext) && resource.endsWith("/index.html")) {
-                String secret = System.getenv("REGISTRATION_TOKEN_SECRET");
-                if (secret == null || secret.isBlank()) {
-                    logger.severe("REGISTRATION_TOKEN_SECRET is not configured");
-                    return addCors(request, request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body("Server configuration error")).build();
-                }
-                long ttl = 900; // default 15 minutes
-                String ttlEnv = System.getenv("REGISTRATION_TOKEN_TTL_SECONDS");
-                if (ttlEnv != null && !ttlEnv.isBlank()) {
-                    try { ttl = Math.max(60, Long.parseLong(ttlEnv)); } catch (Exception ignore) {}
-                }
-                long exp = Instant.now().getEpochSecond() + ttl;
-                String token = TokenUtil.createToken(exp, secret);
-
-                String html = new String(data, StandardCharsets.UTF_8);
-                String inject = "<script>window.DELTAV_TOKEN='" + token + "';window.DELTAV_TOKEN_EXP=" + exp + ";</script>";
-                if (html.contains("</head>")) {
-                    html = html.replace("</head>", inject + "</head>");
-                } else if (html.contains("</body>")) {
-                    html = html.replace("</body>", inject + "</body>");
-                } else {
-                    html = html + inject;
-                }
-                data = html.getBytes(StandardCharsets.UTF_8);
-            }
-
             HttpResponseMessage.Builder builder = request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", contentType)
-                    .header("Cache-Control", ext.equals("html") ? "no-store, must-revalidate" : "public, max-age=3600");
+                    .header("Cache-Control", "public, max-age=3600");
 
             addCors(request, builder);
             if (request.getHttpMethod() == HttpMethod.HEAD) {
@@ -176,7 +161,7 @@ public class StaticFileFunction {
 
         if (!validationResult.valid) {
             logger.warning("Token validation failed for '" + token + "': " + validationResult.error);
-            return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+            return addCors(request, request.createResponseBuilder(HttpStatus.UNAUTHORIZED)
                     .header("Content-Type", "text/html; charset=utf-8")
                     .body("<html><body><h1>Invalid or Expired Link</h1><p>This link is no longer valid. Please request a new link.</p></body></html>")).build();
         }
@@ -187,7 +172,7 @@ public class StaticFileFunction {
         // Create session with practice ID and token
         String sessionId = SessionManager.getInstance().createSession(practiceId, token, logger);
 
-        long sessionTtlSeconds = 1800; // 30 minutes default
+        long sessionTtlSeconds = 900; // 30 minutes default
         String sessionTtlEnv = System.getenv("SESSION_TTL_SECONDS");
         if (sessionTtlEnv != null && !sessionTtlEnv.isBlank()) {
             try { sessionTtlSeconds = Math.max(300, Long.parseLong(sessionTtlEnv)); } catch (Exception ignore) {}
