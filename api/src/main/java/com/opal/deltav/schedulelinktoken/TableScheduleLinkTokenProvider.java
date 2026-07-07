@@ -37,7 +37,9 @@ public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider
             return result;
 
         } catch (Exception e) {
+            e.printStackTrace();
             logger.warning("Failed to get data for key '" + key + "': " + e.getMessage());
+            logger.info(e.toString());
             return Map.of();
         }
     }
