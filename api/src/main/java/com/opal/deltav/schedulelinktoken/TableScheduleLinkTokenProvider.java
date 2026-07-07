@@ -28,14 +28,10 @@ public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider
         try {
             TableClient client = getTableClient(logger);
             TableEntity entity = client.getEntity(PARTITION_KEY, key);
-
             if (entity == null) {
                 return Map.of();
             }
-
-            Map<String, Object> result = new HashMap<>(entity.getProperties());
-            return result;
-
+            return new HashMap<>(entity.getProperties());
         } catch (Exception e) {
             e.printStackTrace();
             logger.warning("Failed to get data for key '" + key + "': " + e.getMessage());
@@ -169,7 +165,10 @@ public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider
                                 .endpoint(endpoint)
                                 .credential(new DefaultAzureCredentialBuilder().build())
                                 .buildClient();
-                    } else if (connStr != null && !connStr.isBlank()) {
+                        serviceClient.listTables().forEach(table -> {
+                            logger.info("Table name: " + table.getName());
+                        });
+                    } else if (connStr != null && !connStr.isBlank()) { 
                         logger.info("Initializing Table Storage client with connection string");
                         serviceClient = new TableServiceClientBuilder()
                                 .connectionString(connStr)
