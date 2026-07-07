@@ -5,8 +5,6 @@ import com.microsoft.azure.functions.annotation.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.opal.deltav.model.RegistrationData;
-import com.opal.deltav.storage.StorageWriter;
-import com.opal.deltav.storage.StorageWriterFactory;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
 
@@ -78,7 +76,8 @@ public class RegistrationFunction {
         try {
             // Build registration data
             RegistrationData registrationData = RegistrationData.builder()
-                    .practiceId(getStr(json, "practice"))
+                    .clientId(getStr(json, "client_id"))
+                    .practiceId(getStr(json, "practice_id"))
                     .registrant(getStr(json, "registrant"))
                     .patientType(getStr(json, "patient_type"))
                     .firstName(getStr(json, "first_name"))
@@ -91,31 +90,20 @@ public class RegistrationFunction {
                     .relationshipOther(getStr(json, "relationship_other"))
                     .build();
 
-            // Write to storage using factory
-            StorageWriter storageWriter = StorageWriterFactory.getWriter();
-            logger.info("Using storage type: " + storageWriter.getType());
-            String rowKey = storageWriter.write(registrationData, logger);
-
-            // Publish to streaming service using factory
+            // Publish to queue
             MessagePublisher publisher = MessagePublisherFactory.getPublisher();
-            if (MessagePublisherFactory.isStreamingEnabled()) {
-                logger.info("Publishing to streaming service: " + publisher.getType());
-                publisher.publish(registrationData, logger);
-            }
+            logger.info("Publishing to queue: " + publisher.getType());
+            publisher.publish(registrationData, logger);
 
             String practiceId = registrationData.getPracticeId();
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
             return jsonResponse(request, HttpStatus.CREATED,
-                    Map.of("id", rowKey, "redirect_url", Objects.toString(redirectUrl, "")));
+                    Map.of("id", registrationData.getId(), "redirect_url", Objects.toString(redirectUrl, "")));
 
-        } catch (IllegalStateException e) {
-            logger.severe("Configuration error: " + e.getMessage());
-            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
-                    Map.of("error", "Internal server error"));
         } catch (Exception e) {
-            logger.severe("Storage error: " + e.getClass().getName() + " - " + e.getMessage());
+            logger.severe("Error publishing to queue: " + e.getClass().getName() + " - " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
         }
@@ -124,6 +112,7 @@ public class RegistrationFunction {
     private List<String> validate(JsonObject json) {
         List<String> errors = new ArrayList<>();
 
+        requireNonBlank(json, "client_id", "Client ID is required", errors);
         requireNonBlank(json, "first_name", "First name is required", errors);
         requireNonBlank(json, "last_name", "Last name is required", errors);
         requireNonBlank(json, "dob", "Date of birth is required", errors);

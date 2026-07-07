@@ -8,33 +8,49 @@ import com.google.gson.Gson;
 import com.opal.deltav.model.RegistrationData;
 
 import java.util.Base64;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.nio.charset.StandardCharsets;
 import java.util.logging.Logger;
 
 public class QueueStoragePublisher implements MessagePublisher {
 
-    private static final String QUEUE_NAME = "patient-registrations";
+    private static final String QUEUE_NAME_SUFFIX = "-schedule-queue";
     private static final Gson gson = new Gson();
-    private static volatile QueueClient queueClient;
+    private static volatile QueueServiceClient serviceClient;
+    private static final Map<String, QueueClient> queueClients = new ConcurrentHashMap<>();
     private static final Object lock = new Object();
 
     @Override
     public void publish(RegistrationData data, Logger logger) throws StreamingException {
-        try {
-            QueueClient client = getQueueClient(logger);
+        String clientId = data.getClientId();
+        if (clientId == null || clientId.isBlank()) {
+            throw new StreamingException("Client ID is required for queue routing");
+        }
 
-            String jsonMessage = gson.toJson(data);
-            // Azure Queue Storage requires Base64 encoding for the message
-            String encodedMessage = Base64.getEncoder().encodeToString(
-                    jsonMessage.getBytes(StandardCharsets.UTF_8));
+        String queueName = clientId + QUEUE_NAME_SUFFIX;
+        String jsonMessage = gson.toJson(data);
+        String encodedMessage = Base64.getEncoder().encodeToString(
+                jsonMessage.getBytes(StandardCharsets.UTF_8));
 
-            logger.info("Publishing registration to Queue Storage: id=" + data.getId());
+        // Retry once if connection is stale
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                QueueClient client = getQueueClient(queueName, logger);
 
-            client.sendMessage(encodedMessage);
+                logger.info("Publishing registration to queue '" + queueName + "': id=" + data.getId());
+                client.sendMessage(encodedMessage);
+                logger.info("Registration published successfully to queue '" + queueName + "': " + data.getId());
+                return;
 
-            logger.info("Registration published successfully to Queue Storage: " + data.getId());
-        } catch (Exception e) {
-            throw new StreamingException("Failed to publish to Queue Storage: " + e.getMessage(), e);
+            } catch (Exception e) {
+                if (attempt == 1) {
+                    logger.warning("Failed to publish, refreshing client for queue '" + queueName + "': " + e.getMessage());
+                    queueClients.remove(queueName);
+                } else {
+                    throw new StreamingException("Failed to publish to Queue Storage: " + e.getMessage(), e);
+                }
+            }
         }
     }
 
@@ -43,40 +59,41 @@ public class QueueStoragePublisher implements MessagePublisher {
         return StreamingType.QUEUE_STORAGE;
     }
 
-    private QueueClient getQueueClient(Logger logger) {
-        if (queueClient == null) {
+    private QueueClient getQueueClient(String queueName, Logger logger) {
+        return queueClients.computeIfAbsent(queueName, name -> {
+            QueueServiceClient svc = getServiceClient(logger);
+            QueueClient client = svc.getQueueClient(name);
+            client.createIfNotExists();
+            logger.info("Queue client initialized for queue: " + name);
+            return client;
+        });
+    }
+
+    private QueueServiceClient getServiceClient(Logger logger) {
+        if (serviceClient == null) {
             synchronized (lock) {
-                if (queueClient == null) {
+                if (serviceClient == null) {
                     String storageAccountName = System.getenv("STORAGE_ACCOUNT_NAME");
                     String connStr = System.getenv("AzureWebJobsStorage");
-                    String queueName = System.getenv("STREAMING_QUEUE_NAME");
-                    if (queueName == null || queueName.isBlank()) {
-                        queueName = QUEUE_NAME;
-                    }
 
-                    QueueServiceClient serviceClient;
                     if (storageAccountName != null && !storageAccountName.isBlank()) {
-                        logger.info("Initializing Queue Storage client with managed identity");
+                        logger.info("Initializing Queue Storage service client with managed identity");
                         String endpoint = "https://" + storageAccountName + ".queue.core.windows.net";
                         serviceClient = new QueueServiceClientBuilder()
                                 .endpoint(endpoint)
                                 .credential(new DefaultAzureCredentialBuilder().build())
                                 .buildClient();
                     } else if (connStr != null && !connStr.isBlank()) {
-                        logger.info("Initializing Queue Storage client with connection string");
+                        logger.info("Initializing Queue Storage service client with connection string");
                         serviceClient = new QueueServiceClientBuilder()
                                 .connectionString(connStr)
                                 .buildClient();
                     } else {
                         throw new StreamingException("Neither STORAGE_ACCOUNT_NAME nor AzureWebJobsStorage is configured");
                     }
-
-                    queueClient = serviceClient.getQueueClient(queueName);
-                    queueClient.createIfNotExists();
-                    logger.info("Queue Storage client initialized successfully for queue: " + queueName);
                 }
             }
         }
-        return queueClient;
+        return serviceClient;
     }
 }

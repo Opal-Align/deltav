@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public class RegistrationData {
     private final String id;
+    private final String clientId;
     private final String practiceId;
     private final String registrant;
     private final String patientType;
@@ -20,6 +21,7 @@ public class RegistrationData {
 
     private RegistrationData(Builder builder) {
         this.id = builder.id != null ? builder.id : UUID.randomUUID().toString();
+        this.clientId = builder.clientId;
         this.practiceId = builder.practiceId;
         this.registrant = builder.registrant;
         this.patientType = builder.patientType;
@@ -35,6 +37,7 @@ public class RegistrationData {
     }
 
     public String getId() { return id; }
+    public String getClientId() { return clientId; }
     public String getPracticeId() { return practiceId; }
     public String getRegistrant() { return registrant; }
     public String getPatientType() { return patientType; }
@@ -54,6 +57,7 @@ public class RegistrationData {
 
     public static class Builder {
         private String id;
+        private String clientId;
         private String practiceId;
         private String registrant;
         private String patientType;
@@ -68,6 +72,7 @@ public class RegistrationData {
         private OffsetDateTime submittedAt;
 
         public Builder id(String id) { this.id = id; return this; }
+        public Builder clientId(String clientId) { this.clientId = clientId; return this; }
         public Builder practiceId(String practiceId) { this.practiceId = practiceId; return this; }
         public Builder registrant(String registrant) { this.registrant = registrant; return this; }
         public Builder patientType(String patientType) { this.patientType = patientType; return this; }
