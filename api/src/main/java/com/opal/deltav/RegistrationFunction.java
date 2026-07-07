@@ -5,6 +5,8 @@ import com.microsoft.azure.functions.annotation.*;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
 import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
@@ -110,11 +112,23 @@ public class RegistrationFunction {
             logger.info("Publishing to queue: " + publisher.getType());
             publisher.publish(registrationData, logger);
 
+            // Mark token as used after successful publish
+            String scheduleLinkToken = SessionManager.getInstance().getTokenForSession(sessionId, logger);
+            if (scheduleLinkToken != null) {
+                String clientIp = getClientIp(request);
+                ScheduleLinkTokenProvider tokenProvider = ScheduleLinkTokenProviderFactory.getProvider();
+                tokenProvider.markAsUsed(scheduleLinkToken, clientIp, logger);
+            }
+
+            // Invalidate session after successful registration
+            SessionManager.getInstance().invalidateSession(sessionId, logger);
+
             String practiceId = registrationData.getPracticeId();
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
-            return jsonResponse(request, HttpStatus.CREATED,
+            // Return response with cookie cleared
+            return jsonResponseWithClearCookie(request, HttpStatus.CREATED,
                     Map.of("id", registrationData.getId(), "redirect_url", Objects.toString(redirectUrl, "")));
 
         } catch (Exception e) {
@@ -179,6 +193,15 @@ public class RegistrationFunction {
         return builder.build();
     }
 
+    private HttpResponseMessage jsonResponseWithClearCookie(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
+        HttpResponseMessage.Builder builder = request.createResponseBuilder(status)
+                .body(gson.toJson(body))
+                .header("Content-Type", "application/json")
+                .header("Set-Cookie", "DELTAV_SESSION=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict");
+        addCorsHeaders(builder, request);
+        return builder.build();
+    }
+
     private HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
         if (body != null) {
@@ -228,5 +251,34 @@ public class RegistrationFunction {
         }
 
         return null;
+    }
+
+    /**
+     * Get client IP address from request headers.
+     * Checks X-Forwarded-For, X-Real-IP, and falls back to direct connection.
+     */
+    private String getClientIp(HttpRequestMessage<?> request) {
+        Map<String, String> headers = request.getHeaders();
+
+        // Check X-Forwarded-For (may contain multiple IPs, take the first)
+        String xff = getHeaderIgnoreCase(headers, "X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            String[] ips = xff.split(",");
+            return ips[0].trim();
+        }
+
+        // Check X-Real-IP
+        String realIp = getHeaderIgnoreCase(headers, "X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        // Check CLIENT-IP
+        String clientIp = getHeaderIgnoreCase(headers, "CLIENT-IP");
+        if (clientIp != null && !clientIp.isBlank()) {
+            return clientIp.trim();
+        }
+
+        return "unknown";
     }
 }

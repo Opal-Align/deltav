@@ -100,4 +100,13 @@ public interface ScheduleLinkTokenProvider {
      * Returns the provider type identifier.
      */
     ScheduleLinkTokenProviderType getType();
+
+    /**
+     * Mark token as used after successful registration.
+     *
+     * @param key the token key
+     * @param clientIp the client IP address
+     * @param logger the logger
+     */
+    void markAsUsed(String key, String clientIp, Logger logger);
 }

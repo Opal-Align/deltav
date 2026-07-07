@@ -6,6 +6,7 @@ import com.azure.data.tables.TableServiceClientBuilder;
 import com.azure.data.tables.models.TableEntity;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -82,6 +83,61 @@ public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider
     @Override
     public ScheduleLinkTokenProviderType getType() {
         return ScheduleLinkTokenProviderType.TABLE_STORAGE;
+    }
+
+    @Override
+    public void markAsUsed(String key, String clientIp, Logger logger) {
+        try {
+            TableClient client = getTableClient(logger);
+
+            // Create entity with only the fields to update
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("status", "used");
+            properties.put("last_seen_ip", clientIp);
+            properties.put("used_at", OffsetDateTime.now());
+
+            TableEntity entity = new TableEntity(PARTITION_KEY, key);
+            entity.setProperties(properties);
+
+            // Use upsert with MERGE mode - only updates specified fields
+            client.upsertEntity(entity);
+            logger.info("Token marked as used: " + key + ", ip=" + clientIp);
+
+        } catch (Exception e) {
+            logger.warning("Failed to mark token as used '" + key + "': " + e.getMessage());
+        }
+    }
+
+    /**
+     * Increment attempt count for a token.
+     */
+    public void incrementAttemptCount(String key, Logger logger) {
+        try {
+            TableClient client = getTableClient(logger);
+            TableEntity entity = client.getEntity(PARTITION_KEY, key);
+
+            if (entity == null) {
+                return;
+            }
+
+            Object attemptObj = entity.getProperties().get("attempt_count");
+            int currentAttempts = 0;
+            if (attemptObj instanceof Number) {
+                currentAttempts = ((Number) attemptObj).intValue();
+            }
+
+            Map<String, Object> properties = new HashMap<>();
+            properties.put("attempt_count", currentAttempts + 1);
+
+            TableEntity updateEntity = new TableEntity(PARTITION_KEY, key);
+            updateEntity.setProperties(properties);
+            client.upsertEntity(updateEntity);
+
+            logger.info("Incremented attempt count for token: " + key + ", new count=" + (currentAttempts + 1));
+
+        } catch (Exception e) {
+            logger.warning("Failed to increment attempt count for '" + key + "': " + e.getMessage());
+        }
     }
 
     private TableClient getTableClient(Logger logger) {
