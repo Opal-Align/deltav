@@ -34,17 +34,42 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
+        String practice = getString(json, "practice");
+        String mobile = getString(json, "mobile");
         String sessionId = getString(json, "session_id");
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
-        if (session == null || !session.isIdentityVerified()) {
-            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_session"));
-        }
-        if (session.isOtpVerified()) {
-            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
-        }
 
         try {
-            return IdentityFunction.deliverOtp(request, logger, session, true);
+            RegistrationSession session;
+            boolean enforceCooldown;
+
+            if (sessionId == null || sessionId.isBlank()) {
+                String normalizedPractice = RedisOtpService.normalizePracticeId(practice);
+                if (normalizedPractice == null) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_practice"));
+                }
+                String phoneE164 = PhoneUtil.toE164(mobile);
+                if (phoneE164 == null) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
+                }
+                sessionId = RedisSessionService.createSession(practice);
+                session = RedisSessionService.bindMobile(sessionId, normalizedPractice, phoneE164);
+                enforceCooldown = false;
+            } else {
+                session = RedisSessionService.getSession(sessionId);
+                if (session == null || !session.isMobileBound()) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_session"));
+                }
+                if (session.isOtpVerified()) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
+                }
+                if (practice != null && !practice.isBlank()
+                        && !practice.equals(session.practiceId)) {
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_session"));
+                }
+                enforceCooldown = true;
+            }
+
+            return deliverOtp(request, logger, session, enforceCooldown);
         } catch (IllegalStateException e) {
             logger.severe("OTP send configuration error: " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "Server configuration error"));
@@ -104,6 +129,48 @@ public class OtpFunction {
         }
     }
 
+    private static HttpResponseMessage deliverOtp(HttpRequestMessage<Optional<String>> request, Logger logger,
+                                                  RegistrationSession session, boolean enforceCooldown) {
+        RedisOtpService.SendResult result = RedisOtpService.sendOtp(session, enforceCooldown);
+        if (!result.success) {
+            if ("resend_throttled".equals(result.error)) {
+                return jsonResponse(request, HttpStatus.TOO_MANY_REQUESTS, Map.of(
+                        "error", result.error,
+                        "retry_after_seconds", result.retryAfterSeconds));
+            }
+            if ("send_limit_reached".equals(result.error)) {
+                return jsonResponse(request, HttpStatus.TOO_MANY_REQUESTS, Map.of("error", result.error));
+            }
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", result.error));
+        }
+
+        if (!SmsOtpSender.isConfigured() && !isPocMode()) {
+            RedisOtpService.clearOtp(session.sessionId);
+            logger.severe("SMS is not configured and OTP_POC_MODE is disabled");
+            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "sms_not_configured"));
+        }
+
+        SmsOtpSender.SmsDeliveryResult smsResult =
+                SmsOtpSender.sendOtpToE164(session.practiceId, session.phoneE164, result.otp);
+        if (!smsResult.sent && !smsResult.skipped) {
+            RedisOtpService.clearOtp(session.sessionId);
+            return jsonResponse(request, HttpStatus.BAD_GATEWAY,
+                    Map.of("error", "sms_send_failed", "message", "Could not send OTP. Please try again."));
+        }
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", true);
+        body.put("session_id", session.sessionId);
+        body.put("phone_masked", RedisSessionService.maskPhone(session.phoneE164));
+        body.put("expires_in_seconds", result.expiresInSeconds);
+        body.put("sends_remaining", result.sendsRemaining);
+        if (isPocMode()) {
+            body.put("poc_otp", result.otp);
+            logger.info("POC OTP shown in response for session " + session.sessionId);
+        }
+        return jsonResponse(request, HttpStatus.OK, body);
+    }
+
     private static JsonObject parseJson(HttpRequestMessage<Optional<String>> request, Logger logger) {
         String body = request.getBody().orElse(null);
         if (body == null || body.isBlank()) return null;
@@ -119,7 +186,12 @@ public class OtpFunction {
         return json.has(field) && !json.get(field).isJsonNull() ? json.get(field).getAsString() : null;
     }
 
-    private HttpResponseMessage jsonResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
+    private static boolean isPocMode() {
+        String flag = System.getenv("OTP_POC_MODE");
+        return flag != null && ("true".equalsIgnoreCase(flag) || "1".equals(flag));
+    }
+
+    private static HttpResponseMessage jsonResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status)
                 .body(gson.toJson(body))
                 .header("Content-Type", "application/json");
@@ -127,7 +199,7 @@ public class OtpFunction {
         return builder.build();
     }
 
-    private HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
+    private static HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
         if (body != null) {
             builder.body(gson.toJson(body)).header("Content-Type", "application/json");
@@ -136,7 +208,7 @@ public class OtpFunction {
         return builder.build();
     }
 
-    private void addCorsHeaders(HttpResponseMessage.Builder builder, HttpRequestMessage<?> request) {
+    private static void addCorsHeaders(HttpResponseMessage.Builder builder, HttpRequestMessage<?> request) {
         String origin = request.getHeaders() != null ? request.getHeaders().get("Origin") : null;
         if (origin == null || origin.isBlank()) origin = "*";
         builder.header("Access-Control-Allow-Origin", origin)

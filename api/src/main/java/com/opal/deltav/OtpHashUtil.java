@@ -9,11 +9,11 @@ public final class OtpHashUtil {
 
     private OtpHashUtil() {}
 
-    public static String hashOtp(String sessionId, long patientKey, String otp, String secret) {
+    public static String hashOtp(String sessionId, String phoneE164, String otp, String secret) {
         if (secret == null || secret.isBlank()) {
             throw new IllegalStateException("OTP hash secret is not configured");
         }
-        String payload = sessionId + ":" + patientKey + ":" + otp.trim();
+        String payload = sessionId + ":" + phoneE164 + ":" + otp.trim();
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
@@ -24,9 +24,9 @@ public final class OtpHashUtil {
         }
     }
 
-    public static boolean matches(String sessionId, long patientKey, String otp, String storedHash, String secret) {
+    public static boolean matches(String sessionId, String phoneE164, String otp, String storedHash, String secret) {
         if (storedHash == null || storedHash.isBlank()) return false;
-        String expected = hashOtp(sessionId, patientKey, otp, secret);
+        String expected = hashOtp(sessionId, phoneE164, otp, secret);
         return constantTimeEquals(expected, storedHash);
     }
 

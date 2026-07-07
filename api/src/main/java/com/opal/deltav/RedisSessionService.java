@@ -29,7 +29,7 @@ public final class RedisSessionService {
         return sessionId;
     }
 
-    public static RegistrationSession bindPatient(String sessionId, String practiceId, long patientKey, String phoneE164) {
+    public static RegistrationSession bindMobile(String sessionId, String practiceId, String phoneE164) {
         RegistrationSession existing = getSession(sessionId);
         if (existing == null) {
             throw new IllegalArgumentException("invalid_session");
@@ -43,8 +43,7 @@ public final class RedisSessionService {
 
         try (Jedis jedis = RedisClients.getPool().getResource()) {
             Map<String, String> fields = new HashMap<>();
-            fields.put("state", RegistrationSession.STATE_IDENTITY_VERIFIED);
-            fields.put("patient_key", Long.toString(patientKey));
+            fields.put("state", RegistrationSession.STATE_MOBILE_BOUND);
             fields.put("phone_e164", phoneE164);
             jedis.hset(sessionKey(sessionId), fields);
             jedis.expire(sessionKey(sessionId), SESSION_TTL_SECONDS);
@@ -54,7 +53,7 @@ public final class RedisSessionService {
 
     public static void markOtpVerified(String sessionId) {
         RegistrationSession session = getSession(sessionId);
-        if (session == null || !session.isIdentityVerified()) {
+        if (session == null || !session.isMobileBound()) {
             throw new IllegalArgumentException("invalid_session");
         }
         try (Jedis jedis = RedisClients.getPool().getResource()) {
@@ -71,10 +70,8 @@ public final class RedisSessionService {
 
             String practiceId = fields.get("practice_id");
             String state = fields.getOrDefault("state", RegistrationSession.STATE_CREATED);
-            String patientKeyRaw = fields.get("patient_key");
             String phoneE164 = fields.get("phone_e164");
-            long patientKey = patientKeyRaw == null || patientKeyRaw.isBlank() ? 0L : Long.parseLong(patientKeyRaw);
-            return new RegistrationSession(sessionId, practiceId, state, patientKey, phoneE164);
+            return new RegistrationSession(sessionId, practiceId, state, phoneE164);
         }
     }
 

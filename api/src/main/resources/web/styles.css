@@ -695,17 +695,10 @@ body {
 }
 
 .otp-modal-sub {
-  margin: 0 0 0.75rem;
+  margin: 0 0 1rem;
   color: var(--text-muted);
   font-size: 0.9375rem;
   line-height: 1.5;
-}
-
-.otp-phone-masked {
-  margin: 0 0 1rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text);
 }
 
 .otp-step { margin-top: 1rem; }
@@ -724,12 +717,46 @@ body {
 
 .otp-poc-hint {
   margin-top: 0.75rem;
-  padding: 0.625rem 0.75rem;
+  padding: 0.75rem 1rem;
   border-radius: var(--radius-sm);
-  background: #fef9c3;
-  border: 1px solid #fde047;
-  color: #854d0e;
-  font-size: 0.875rem;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  color: #1e40af;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.08em;
 }
 
 .otp-cancel { margin-top: 1rem; }
+
+.otp-success-wrap {
+  text-align: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.otp-success-icon {
+  width: 4.5rem;
+  height: 4.5rem;
+  margin: 0 auto 1.25rem;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.otp-success-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.otp-success-message {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+}

@@ -32,11 +32,15 @@ public final class RedisOtpService {
         return trimmed;
     }
 
+    public static String normalizeMobile(String mobile) {
+        return PhoneUtil.normalizeMobile(mobile);
+    }
+
     public static SendResult sendOtp(RegistrationSession session, boolean enforceCooldown) {
-        if (session == null || !session.isIdentityVerified()) {
+        if (session == null || !session.isMobileBound()) {
             return SendResult.invalidSession();
         }
-        if (session.patientKey <= 0 || session.phoneE164 == null || session.phoneE164.isBlank()) {
+        if (session.phoneE164 == null || session.phoneE164.isBlank()) {
             return SendResult.invalidSession();
         }
 
@@ -60,7 +64,7 @@ public final class RedisOtpService {
 
             String otp = generateOtp();
             String secret = getOtpHashSecret();
-            String hashedOtp = OtpHashUtil.hashOtp(session.sessionId, session.patientKey, otp, secret);
+            String hashedOtp = OtpHashUtil.hashOtp(session.sessionId, session.phoneE164, otp, secret);
 
             jedis.setex(otpKey(session.sessionId), OTP_TTL_SECONDS, hashedOtp);
             jedis.del(attemptsKey(session.sessionId));
@@ -86,7 +90,7 @@ public final class RedisOtpService {
 
     public static VerifyResult verifyOtp(String sessionId, String otp) {
         RegistrationSession session = RedisSessionService.getSession(sessionId);
-        if (session == null || !session.isIdentityVerified()) {
+        if (session == null || !session.isMobileBound()) {
             return VerifyResult.invalidSession();
         }
         if (otp == null || !otp.matches("\\d{6}")) {
@@ -100,7 +104,7 @@ public final class RedisOtpService {
             }
 
             String secret = getOtpHashSecret();
-            if (OtpHashUtil.matches(sessionId, session.patientKey, otp, storedHash, secret)) {
+            if (OtpHashUtil.matches(sessionId, session.phoneE164, otp, storedHash, secret)) {
                 jedis.del(otpKey(sessionId));
                 jedis.del(attemptsKey(sessionId));
                 RedisSessionService.markOtpVerified(sessionId);
@@ -187,6 +191,14 @@ public final class RedisOtpService {
 
         public static SendResult invalidSession() {
             return new SendResult(false, "invalid_session", null, 0, 0, 0);
+        }
+
+        public static SendResult invalidMobile() {
+            return new SendResult(false, "invalid_mobile", null, 0, 0, 0);
+        }
+
+        public static SendResult invalidPractice() {
+            return new SendResult(false, "invalid_practice", null, 0, 0, 0);
         }
 
         public static SendResult sendLimitReached() {

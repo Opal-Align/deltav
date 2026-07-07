@@ -143,7 +143,6 @@ public class RegistrationFunction {
                     .addProperty("lastName", getStr(json, "last_name"))
                     .addProperty("dob", getStr(json, "dob"))
                     .addProperty("mobile", session.phoneE164)
-                    .addProperty("patientKey", session.patientKey)
                     .addProperty("sessionId", sessionId)
                     .addProperty("confirmAccurate", getBool(json, "confirm_accurate"))
                     .addProperty("agreePrivacy", getBool(json, "agree_privacy"))
