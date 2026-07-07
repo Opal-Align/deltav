@@ -11,7 +11,7 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-MBGGJ2K2');</script>
   <!-- End Google Tag Manager -->
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -211,11 +211,53 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </main>
 
 </div>
+
+<div id="otp-modal" class="otp-modal" hidden aria-hidden="true">
+  <div class="otp-modal-backdrop"></div>
+  <div class="otp-modal-card" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title">
+    <h2 id="otp-modal-title" class="otp-modal-title">Verify your mobile number</h2>
+    <p class="otp-modal-sub">Enter your mobile number to receive a one-time code. The code expires in 1 minute.</p>
+
+    <div id="otp-step-send" class="otp-step">
+      <div class="field">
+        <label class="field-label" for="mobile-number">Mobile number</label>
+        <input type="tel" id="mobile-number" class="input" placeholder="(555) 555-5555" inputmode="tel" autocomplete="tel" />
+        <span class="error-msg" id="err-mobile" role="alert"></span>
+      </div>
+      <button type="button" id="otp-send-btn" class="btn btn-primary btn-block">Send OTP</button>
+    </div>
+
+    <div id="otp-step-verify" class="otp-step" hidden>
+      <div class="field">
+        <label class="field-label" for="otp-code">Enter OTP</label>
+        <input type="text" id="otp-code" class="input otp-input" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" />
+        <span class="error-msg" id="err-otp" role="alert"></span>
+      </div>
+      <p id="otp-timer" class="otp-timer" hidden>Code expires in <span id="otp-timer-value">60</span>s</p>
+      <p id="otp-poc-hint" class="otp-poc-hint" hidden></p>
+      <button type="button" id="otp-verify-btn" class="btn btn-primary btn-block">Verify &amp; Continue</button>
+      <button type="button" id="otp-resend-btn" class="btn btn-ghost btn-block" disabled>Resend OTP</button>
+    </div>
+
+    <div id="otp-step-success" class="otp-step otp-success-wrap" hidden>
+      <div class="otp-success-icon" aria-hidden="true">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <path d="M8 18.5l7 7 13-14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2 class="otp-success-title">Registration complete</h2>
+      <p class="otp-success-message">Thank you for registering. Our team will contact you shortly to confirm your appointment time.</p>
+    </div>
+
+    <button type="button" id="otp-cancel-btn" class="btn btn-ghost btn-block otp-cancel">Cancel</button>
+  </div>
+</div>
+
 <script>
   if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-    window.DELTAV_API_URL = "http://localhost:7071";
+    window.DELTAV_API_URL = location.origin;
   }
 </script>
-<script src="form.js?v=2"></script>
+<script src="form.js?v=13"></script>
 </body>
 </html>
