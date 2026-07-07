@@ -17,7 +17,7 @@ import java.util.logging.Logger;
  */
 public class TableScheduleLinkTokenProvider implements ScheduleLinkTokenProvider {
 
-    private static final String TABLE_NAME = "schedulelinktoken";
+    private static final String TABLE_NAME = "schedulelinktokens";
     private static final String PARTITION_KEY = "token";
     private static volatile TableServiceClient serviceClient;
     private static volatile TableClient tableClient;
