@@ -6,18 +6,18 @@ metadata:
   name: queue-worker-${CLIENT_ID}
   labels:
     app: queue-worker
-    client: ${CLIENT_ID}
+    client: "${CLIENT_ID}"
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: queue-worker
-      client: ${CLIENT_ID}
+      client: "${CLIENT_ID}"
   template:
     metadata:
       labels:
         app: queue-worker
-        client: ${CLIENT_ID}
+        client: "${CLIENT_ID}"
         azure.workload.identity/use: "true"
     spec:
       serviceAccountName: queue-worker-sa
