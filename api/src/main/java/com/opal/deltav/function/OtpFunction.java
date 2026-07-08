@@ -8,6 +8,10 @@ import com.opal.deltav.otp.RedisOtpService;
 import com.opal.deltav.otp.RedisSessionService;
 import com.opal.deltav.otp.RegistrationSession;
 import com.opal.deltav.otp.SmsOtpSender;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkToken;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
+import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.util.PhoneUtil;
 
 import java.util.HashMap;
@@ -48,13 +52,6 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
         }
 
-        JsonObject json = parseJson(request, logger);
-        if (json == null) {
-            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
-        }
-
-        String mobile = getString(json, "mobile");
-
         try {
             boolean enforceCooldown;
 
@@ -65,9 +62,31 @@ public class OtpFunction {
                 }
                 enforceCooldown = true;
             } else {
-                // First time - bind mobile to session
+                // First time - fetch mobile from Azure Table using token
+                String token = SessionManager.getInstance().getTokenForSession(sessionId, logger);
+                if (token == null || token.isBlank()) {
+                    logger.warning("OTP send rejected: no token associated with session " + sessionId);
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Session token not found"));
+                }
+
+                // Validate token and get token data with decrypted mobile number
+                ScheduleLinkTokenProvider provider = ScheduleLinkTokenProviderFactory.getProvider();
+                ScheduleLinkTokenProvider.ValidationResult validationResult = provider.validateToken(token, logger);
+                if (!validationResult.valid) {
+                    logger.warning("OTP send rejected: token validation failed - " + validationResult.error);
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Token validation failed"));
+                }
+
+                ScheduleLinkToken tokenData = validationResult.token;
+                String mobile = tokenData.getMobileNumber();
+                if (mobile == null || mobile.isBlank()) {
+                    logger.warning("OTP send rejected: no mobile number in token data for session " + sessionId);
+                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Mobile number not found"));
+                }
+
                 String phoneE164 = PhoneUtil.toE164(mobile);
                 if (phoneE164 == null) {
+                    logger.warning("OTP send rejected: invalid mobile format in token - " + mobile);
                     return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
                 }
                 session = RedisSessionService.bindMobile(sessionId, session.practiceId, phoneE164, logger);
