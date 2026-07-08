@@ -92,5 +92,6 @@ jobs:
                 "STORAGE_ACCOUNT_NAME=${{ vars.STORAGE_ACCOUNT_NAME }}" \
                 "REDIS_HOST=${{ vars.REDIS_HOST }}" \
                 "REDIS_USER=${{ vars.REDIS_USER }}" \
+                "REDIS_PORT=${{ vars.REDIS_PORT }}" \
                 "AZURE_COMMUNICATION_CONNECTION_STRING=${{ vars.AZURE_COMMUNICATION_CONNECTION_STRING }}" \
                 "SMS_DEFAULT_FROM_NUMBER=${{ vars.SMS_DEFAULT_FROM_NUMBER }}"
