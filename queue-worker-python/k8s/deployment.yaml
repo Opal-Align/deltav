@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: queue-worker-${CLIENT_ID}
+  namespace: ${NAMESPACE}
   labels:
     app: queue-worker
     client: ${CLIENT_ID}
@@ -23,24 +24,10 @@ spec:
       serviceAccountName: queue-worker-sa
       containers:
         - name: worker
-          image: ${ACR_NAME}.azurecr.io/queue-worker-python:latest
+          image: ${REGISTRY_URL}/${IMAGE_NAME}:latest
           env:
             - name: CLIENT_ID
               value: "${CLIENT_ID}"
-            - name: QUEUE_NAME
-              value: "${QUEUE_NAME}"
-            # Managed Identity for Queue (preferred)
-            - name: AZURE_CLIENT_ID
-              value: "${MANAGED_IDENTITY_CLIENT_ID}"
-            - name: AZURE_STORAGE_ACCOUNT_URL
-              value: "https://${STORAGE_ACCOUNT}.queue.core.windows.net"
-            # Fallback: Connection string (optional, used if MI fails)
-            - name: AZURE_STORAGE_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: queue-worker-${CLIENT_ID}-secrets
-                  key: AZURE_STORAGE_CONNECTION_STRING
-                  optional: true
             # SQL Server (SQL Authentication)
             - name: SQL_CONNECTION_STRING
               valueFrom:
