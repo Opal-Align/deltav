@@ -179,7 +179,7 @@ public class OtpFunction {
         }
         logger.info("Triggering otp from deliverOtp ");
         SmsOtpSender.SmsDeliveryResult smsResult =
-                SmsOtpSender.sendOtpToE164(session.practiceId, session.phoneE164, result.otp);
+                SmsOtpSender.sendOtpToE164(session.practiceId, session.phoneE164, result.otp, logger);
         if (!smsResult.sent && !smsResult.skipped) {
             RedisOtpService.clearOtp(session.sessionId, logger);
             return jsonResponse(request, HttpStatus.BAD_GATEWAY,

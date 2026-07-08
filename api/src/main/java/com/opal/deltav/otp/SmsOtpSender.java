@@ -13,23 +13,24 @@ import java.util.logging.Logger;
  */
 public final class SmsOtpSender {
 
-    private static final Logger LOGGER = Logger.getLogger(SmsOtpSender.class.getName());
+
     private static volatile SmsClient client;
     private static final Object clientLock = new Object();
 
-    private SmsOtpSender() {}
+    private SmsOtpSender() {
+    }
 
-    public static SmsDeliveryResult sendOtp(String practiceId, String mobile, String otp) {
+    public static SmsDeliveryResult sendOtp(String practiceId, String mobile, String otp, Logger logger) {
         String toNumber = PhoneUtil.toE164(mobile);
         if (toNumber == null) {
             return SmsDeliveryResult.failed("invalid_mobile");
         }
-        return sendOtpToE164(practiceId, toNumber, otp);
+        return sendOtpToE164(practiceId, toNumber, otp, logger);
     }
 
-    public static SmsDeliveryResult sendOtpToE164(String practiceId, String toNumber, String otp) {
+    public static SmsDeliveryResult sendOtpToE164(String practiceId, String toNumber, String otp, Logger logger) {
         if (isSmsDisabled()) {
-            LOGGER.info("SMS sending disabled; OTP not sent via SMS for practice=" + practiceId);
+            logger.info("SMS sending disabled; OTP not sent via SMS for practice=" + practiceId);
             return SmsDeliveryResult.skipped();
         }
 
@@ -52,16 +53,16 @@ public final class SmsOtpSender {
                     new SmsSendOptions().setDeliveryReportEnabled(true));
 
             if (result.isSuccessful()) {
-                LOGGER.info("OTP SMS accepted by ACS for " + maskDestination(toNumber) +
+                logger.info("OTP SMS accepted by ACS for " + maskDestination(toNumber) +
                         " messageId=" + result.getMessageId());
                 return SmsDeliveryResult.sent();
             }
 
             String error = result.getErrorMessage() != null ? result.getErrorMessage() : "sms_send_failed";
-            LOGGER.warning("OTP SMS failed for " + maskDestination(toNumber) + ": " + error);
+            logger.warning("OTP SMS failed for " + maskDestination(toNumber) + ": " + error);
             return SmsDeliveryResult.failed(error);
         } catch (Exception e) {
-            LOGGER.severe("OTP SMS error: " + e.getClass().getName() + " - " + e.getMessage());
+            logger.severe("OTP SMS error: " + e.getClass().getName() + " - " + e.getMessage());
             return SmsDeliveryResult.failed("sms_send_failed");
         }
     }
