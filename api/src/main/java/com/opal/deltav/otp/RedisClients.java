@@ -95,12 +95,16 @@ final class RedisClients {
                 .block()
                 .getToken();
 
+        logger.info("Redis connection config - host: " + redisHost + ", port: " + redisPort + ", ssl: " + useSsl + ", user: " + redisUser);
+
         DefaultJedisClientConfig clientConfig = DefaultJedisClientConfig.builder()
                 .user(redisUser)
                 .password(accessToken)
                 .ssl(useSsl)
                 .build();
 
-        return new JedisPool(poolConfig, new HostAndPort(redisHost, redisPort), clientConfig);
+        JedisPool jedisPool = new JedisPool(poolConfig, new HostAndPort(redisHost, redisPort), clientConfig);
+        logger.info("Redis connection pool created successfully");
+        return jedisPool;
     }
 }
