@@ -203,6 +203,13 @@ public class StaticFileFunction {
             String registrationToken = TokenUtil.createToken(exp, secret);
 
             String html = new String(data, StandardCharsets.UTF_8);
+
+            // Replace practice name placeholder
+            String practiceName = validationResult.token.getPracticeName();
+            if (practiceName != null && !practiceName.isBlank()) {
+                html = html.replace("${practice_name}", practiceName);
+            }
+
             String inject = "<script>window.DELTAV_TOKEN='" + registrationToken + "';window.DELTAV_TOKEN_EXP=" + exp + ";</script>";
             if (html.contains("</head>")) {
                 html = html.replace("</head>", inject + "</head>");

@@ -3,9 +3,11 @@ package com.opal.deltav.function;
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.opal.deltav.config.PracticeConfig;
 import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkToken;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
 import com.opal.deltav.session.SessionManager;
@@ -13,7 +15,6 @@ import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
 import com.opal.deltav.util.TokenUtil;
 
-import java.time.LocalDate;
 import java.util.*;
 import java.util.logging.Logger;
 
@@ -85,6 +86,26 @@ public class RegistrationFunction {
                     Map.of("error", "Invalid or expired session"));
         }
 
+        // Get schedule link token from session to retrieve client/practice data
+        String scheduleLinkToken = SessionManager.getInstance().getTokenForSession(sessionId, logger);
+        if (scheduleLinkToken == null || scheduleLinkToken.isBlank()) {
+            logger.warning("Registration rejected: no schedule link token found for session");
+            return jsonResponse(request, HttpStatus.BAD_REQUEST,
+                    Map.of("error", "Invalid session - missing token data"));
+        }
+
+        // Validate and get token data from table storage
+        ScheduleLinkTokenProvider tokenProvider = ScheduleLinkTokenProviderFactory.getProvider();
+        ScheduleLinkTokenProvider.ValidationResult validationResult = tokenProvider.validateToken(scheduleLinkToken, logger);
+        if (!validationResult.valid) {
+            logger.warning("Registration rejected: schedule link token invalid - " + validationResult.error);
+            return jsonResponse(request, HttpStatus.BAD_REQUEST,
+                    Map.of("error", "Invalid or expired link"));
+        }
+
+        ScheduleLinkToken tokenData = validationResult.token;
+
+        // Validate request
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
             logger.warning("Validation failed: " + String.join(", ", errors));
@@ -93,20 +114,32 @@ public class RegistrationFunction {
         }
 
         try {
+            // Get data from token (Azure Table)
+            String clientId = tokenData.getClientId() != null ? String.valueOf(tokenData.getClientId()) : "";
+            String practiceId = tokenData.getPracticeId() != null ? String.valueOf(tokenData.getPracticeId()) : "";
+            String mobileNumber = tokenData.getMobileNumber() != null ? tokenData.getMobileNumber() : "";
+
+            // Get preferred slots from request
+            List<String> preferredSlots = getStringList(json, "preferred_slots");
+            String comments = getStr(json, "comments");
+
             // Build registration data
             RegistrationData registrationData = RegistrationData.builder()
-                    .clientId("101")
-                    .practiceId(getStr(json, "1012"))
-                    .registrant(getStr(json, "registrant"))
-                    .patientType(getStr(json, "patient_type"))
-                    .firstName(getStr(json, "first_name"))
-                    .lastName(getStr(json, "last_name"))
-                    .dob(getStr(json, "dob"))
-                    .confirmAccurate(getBool(json, "confirm_accurate"))
+                    .clientId(clientId)
+                    .practiceId(practiceId)
+                    .mobileNumber(mobileNumber)
+                    .registrant("")  // Not provided in new payload
+                    .patientType("") // Not provided in new payload
+                    .firstName("")   // Not provided in new payload
+                    .lastName("")    // Not provided in new payload
+                    .dob("")         // Not provided in new payload
+                    .confirmAccurate(true) // Implied by submission
                     .agreePrivacy(getBool(json, "agree_privacy"))
-                    .redirectUrl(getStr(json, "redirect_url"))
-                    .relationship(getStr(json, "relationship"))
-                    .relationshipOther(getStr(json, "relationship_other"))
+                    .redirectUrl("") // Will be resolved from practice config
+                    .relationship("")
+                    .relationshipOther("")
+                    .preferredSlots(preferredSlots)
+                    .comments(comments)
                     .build();
 
             // Publish to queue
@@ -115,17 +148,12 @@ public class RegistrationFunction {
             publisher.publish(registrationData, logger);
 
             // Mark token as used after successful publish
-            String scheduleLinkToken = SessionManager.getInstance().getTokenForSession(sessionId, logger);
-            if (scheduleLinkToken != null) {
-                String clientIp = getClientIp(request);
-                ScheduleLinkTokenProvider tokenProvider = ScheduleLinkTokenProviderFactory.getProvider();
-                tokenProvider.markAsUsed(scheduleLinkToken, clientIp, logger);
-            }
+            String clientIp = getClientIp(request);
+            tokenProvider.markAsUsed(scheduleLinkToken, clientIp, logger);
 
             // Invalidate session after successful registration
             SessionManager.getInstance().invalidateSession(sessionId, logger);
 
-            String practiceId = registrationData.getPracticeId();
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
@@ -143,40 +171,11 @@ public class RegistrationFunction {
     private List<String> validate(JsonObject json) {
         List<String> errors = new ArrayList<>();
 
-        requireNonBlank(json, "client_id", "Client ID is required", errors);
-        requireNonBlank(json, "first_name", "First name is required", errors);
-        requireNonBlank(json, "last_name", "Last name is required", errors);
-        requireNonBlank(json, "dob", "Date of birth is required", errors);
-        requireNonBlank(json, "patient_type", "Patient type is required", errors);
-
-        String dob = getStr(json, "dob");
-        if (dob != null && !dob.isBlank()) {
-            try {
-                if (LocalDate.parse(dob).isAfter(LocalDate.now())) {
-                    errors.add("Date of birth cannot be in the future");
-                }
-            } catch (Exception e) {
-                errors.add("Invalid date format for dob");
-            }
-        }
-
-        if (!getBool(json, "confirm_accurate")) errors.add("Must confirm accuracy");
-        if (!getBool(json, "agree_privacy")) errors.add("Must agree to privacy policy");
-
-        String registrant = getStr(json, "registrant");
-        if ("another".equals(registrant)) {
-            requireNonBlank(json, "relationship", "Relationship is required", errors);
-            if ("other".equals(getStr(json, "relationship"))) {
-                requireNonBlank(json, "relationship_other", "Please specify the relationship", errors);
-            }
+        if (!getBool(json, "agree_privacy")) {
+            errors.add("Must agree to privacy policy");
         }
 
         return errors;
-    }
-
-    private void requireNonBlank(JsonObject j, String field, String msg, List<String> errors) {
-        String val = getStr(j, field);
-        if (val == null || val.isBlank()) errors.add(msg);
     }
 
     private String getStr(JsonObject j, String field) {
@@ -185,6 +184,24 @@ public class RegistrationFunction {
 
     private boolean getBool(JsonObject j, String field) {
         return j.has(field) && !j.get(field).isJsonNull() && j.get(field).getAsBoolean();
+    }
+
+    private List<String> getStringList(JsonObject j, String field) {
+        if (!j.has(field) || j.get(field).isJsonNull()) {
+            return new ArrayList<>();
+        }
+        try {
+            JsonArray array = j.getAsJsonArray(field);
+            List<String> result = new ArrayList<>();
+            for (int i = 0; i < array.size(); i++) {
+                if (!array.get(i).isJsonNull()) {
+                    result.add(array.get(i).getAsString());
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 
     private HttpResponseMessage jsonResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
@@ -232,17 +249,12 @@ public class RegistrationFunction {
         return null;
     }
 
-    /**
-     * Extract session ID from Cookie header.
-     * Cookie format: "DELTAV_SESSION=uuid; other=value"
-     */
     private String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
         String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
         if (cookieHeader == null || cookieHeader.isBlank()) {
             return null;
         }
 
-        // Parse cookies: "name1=value1; name2=value2"
         for (String cookie : cookieHeader.split(";")) {
             String trimmed = cookie.trim();
             if (trimmed.startsWith("DELTAV_SESSION=")) {
@@ -255,27 +267,20 @@ public class RegistrationFunction {
         return null;
     }
 
-    /**
-     * Get client IP address from request headers.
-     * Checks X-Forwarded-For, X-Real-IP, and falls back to direct connection.
-     */
     private String getClientIp(HttpRequestMessage<?> request) {
         Map<String, String> headers = request.getHeaders();
 
-        // Check X-Forwarded-For (may contain multiple IPs, take the first)
         String xff = getHeaderIgnoreCase(headers, "X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
             String[] ips = xff.split(",");
             return ips[0].trim();
         }
 
-        // Check X-Real-IP
         String realIp = getHeaderIgnoreCase(headers, "X-Real-IP");
         if (realIp != null && !realIp.isBlank()) {
             return realIp.trim();
         }
 
-        // Check CLIENT-IP
         String clientIp = getHeaderIgnoreCase(headers, "CLIENT-IP");
         if (clientIp != null && !clientIp.isBlank()) {
             return clientIp.trim();
