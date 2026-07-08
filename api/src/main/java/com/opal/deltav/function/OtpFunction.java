@@ -42,6 +42,7 @@ public class OtpFunction {
         }
 
         RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
+        logger.info("Session retrieved: " + session);
         if (session == null) {
             logger.warning("OTP send rejected: invalid session " + sessionId);
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
@@ -176,7 +177,7 @@ public class OtpFunction {
             logger.severe("SMS is not configured and OTP_POC_MODE is disabled");
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "sms_not_configured"));
         }
-
+        logger.info("Triggering otp from deliverOtp ");
         SmsOtpSender.SmsDeliveryResult smsResult =
                 SmsOtpSender.sendOtpToE164(session.practiceId, session.phoneE164, result.otp);
         if (!smsResult.sent && !smsResult.skipped) {
