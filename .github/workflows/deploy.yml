@@ -32,6 +32,7 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
 
     steps:
       - name: Checkout code
@@ -70,3 +71,26 @@ jobs:
         with:
           app-name: ${{ env.FUNCTION_APP_NAME }}
           package: api/target/azure-functions/${{ env.FUNCTION_APP_NAME }}
+
+      - name: Configure App Settings
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            # All services use system-assigned managed identity
+            # Required RBAC roles on Storage Account:
+            #   - Storage Queue Data Contributor (for queue publishing)
+            #   - Storage Table Data Contributor (for token validation)
+            #   - Storage Blob Data Reader (for practice config)
+            # Required for Redis:
+            #   - Enable Entra ID auth on Redis
+            #   - Grant managed identity access to Redis
+            az functionapp config appsettings set \
+              --name ${{ env.FUNCTION_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP_NAME }} \
+              --settings \
+                "REGISTRATION_TOKEN_SECRET=${{ secrets.REGISTRATION_TOKEN_SECRET }}" \
+                "STORAGE_ACCOUNT_NAME=${{ vars.STORAGE_ACCOUNT_NAME }}" \
+                "REDIS_HOST=${{ vars.REDIS_HOST }}" \
+                "REDIS_USER=${{ vars.REDIS_USER }}" \
+                "AZURE_COMMUNICATION_CONNECTION_STRING=${{ vars.AZURE_COMMUNICATION_CONNECTION_STRING }}" \
+                "SMS_DEFAULT_FROM_NUMBER=${{ vars.SMS_DEFAULT_FROM_NUMBER }}"

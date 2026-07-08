@@ -1,0 +1,112 @@
+name: Build & Deploy Queue Worker
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - main
+      client_id:
+        description: 'Client ID for the queue worker'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        type: choice
+        options:
+          - marquee-test
+          - marquee
+          - default
+      sql_database:
+        description: 'SQL Database name'
+        required: true
+        type: string
+
+env:
+  IMAGE_NAME: queue-worker-python
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print Deploy Info
+        run: |
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Client ID: ${{ github.event.inputs.client_id }}"
+          echo "Namespace: ${{ github.event.inputs.namespace }}"
+          echo "SQL Database: ${{ github.event.inputs.sql_database }}"
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
+          tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
+          client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
+          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Build and Push Docker Image
+        working-directory: queue-worker-python
+        env:
+          FULL_IMAGE_NAME: ${{ vars.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}-${{ github.event.inputs.environment }}
+        run: |
+          docker build -t $FULL_IMAGE_NAME:${{ github.sha }} .
+          docker build -t $FULL_IMAGE_NAME:latest .
+          docker push $FULL_IMAGE_NAME:${{ github.sha }}
+          docker push $FULL_IMAGE_NAME:latest
+
+      - name: Get AKS Credentials
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ vars.AKS_RESOURCE_GROUP }} \
+            --name ${{ vars.AKS_CLUSTER_NAME }}
+
+      - name: Deploy Service Account
+        working-directory: queue-worker-python/k8s
+        env:
+          NAMESPACE: ${{ github.event.inputs.namespace }}
+        run: |
+          envsubst < service-account-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+
+      - name: Deploy ConfigMap
+        working-directory: queue-worker-python/k8s
+        env:
+          NAMESPACE: ${{ github.event.inputs.namespace }}
+        run: |
+          envsubst < configmap-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+
+      - name: Deploy Secret
+        working-directory: queue-worker-python/k8s
+        env:
+          CLIENT_ID: ${{ github.event.inputs.client_id }}
+          NAMESPACE: ${{ github.event.inputs.namespace }}
+          SQL_DATABASE: ${{ github.event.inputs.sql_database }}
+        run: |
+          envsubst < secret-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+
+      - name: Deploy to AKS
+        working-directory: queue-worker-python/k8s
+        env:
+          CLIENT_ID: ${{ github.event.inputs.client_id }}
+          NAMESPACE: ${{ github.event.inputs.namespace }}
+          REGISTRY_URL: ${{ vars.ACR_NAME }}.azurecr.io
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}-${{ github.event.inputs.environment }}
+        run: |
+          envsubst < deployment.yaml | kubectl apply -f -

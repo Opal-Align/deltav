@@ -1,60 +1,25 @@
-package com.opal.deltav;
+package com.opal.deltav.function;
 
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
-import com.azure.data.tables.TableClient;
-import com.azure.data.tables.TableServiceClient;
-import com.azure.data.tables.TableServiceClientBuilder;
-import com.azure.data.tables.models.TableEntity;
-import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.opal.deltav.config.PracticeConfig;
+import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
+import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
+import com.opal.deltav.session.SessionManager;
+import com.opal.deltav.streaming.MessagePublisher;
+import com.opal.deltav.streaming.MessagePublisherFactory;
+import com.opal.deltav.util.TokenUtil;
 
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.logging.Logger;
 
 public class RegistrationFunction {
 
     private static final Gson gson = new Gson();
-    private static final String TABLE_NAME = "PatientRegistrations";
-    private static volatile TableClient tableClient;
-    private static final Object lock = new Object();
-
-    private static TableClient getTableClient(Logger logger) {
-        if (tableClient == null) {
-            synchronized (lock) {
-                if (tableClient == null) {
-                    String storageAccountName = System.getenv("STORAGE_ACCOUNT_NAME");
-                    String connStr = System.getenv("AzureWebJobsStorage");
-
-                    TableServiceClient serviceClient;
-                    if (storageAccountName != null && !storageAccountName.isBlank()) {
-                        logger.info("Initializing Table Storage client with managed identity");
-                        String endpoint = "https://" + storageAccountName + ".table.core.windows.net";
-                        serviceClient = new TableServiceClientBuilder()
-                                .endpoint(endpoint)
-                                .credential(new DefaultAzureCredentialBuilder().build())
-                                .buildClient();
-                    } else if (connStr != null && !connStr.isBlank()) {
-                        logger.info("Initializing Table Storage client with connection string");
-                        serviceClient = new TableServiceClientBuilder()
-                                .connectionString(connStr)
-                                .buildClient();
-                    } else {
-                        throw new IllegalStateException("Neither STORAGE_ACCOUNT_NAME nor AzureWebJobsStorage is configured");
-                    }
-
-                    serviceClient.createTableIfNotExists(TABLE_NAME);
-                    tableClient = serviceClient.getTableClient(TABLE_NAME);
-                    logger.info("Table Storage client initialized successfully");
-                }
-            }
-        }
-        return tableClient;
-    }
 
     @FunctionName("register")
     public HttpResponseMessage run(
@@ -106,6 +71,20 @@ public class RegistrationFunction {
                     Map.of("error", tokenResult.error));
         }
 
+        // Validate session from cookie
+        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
+        if (sessionId == null || sessionId.isBlank()) {
+            logger.warning("Registration rejected: missing session cookie");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "Session required"));
+        }
+
+        if (!SessionManager.getInstance().isValidSession(sessionId, logger)) {
+            logger.warning("Registration rejected: invalid or expired session");
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
+                    Map.of("error", "Invalid or expired session"));
+        }
+
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
             logger.warning("Validation failed: " + String.join(", ", errors));
@@ -114,43 +93,48 @@ public class RegistrationFunction {
         }
 
         try {
-            TableClient client = getTableClient(logger);
+            // Build registration data
+            RegistrationData registrationData = RegistrationData.builder()
+                    .clientId(getStr(json, "client_id"))
+                    .practiceId(getStr(json, "practice_id"))
+                    .registrant(getStr(json, "registrant"))
+                    .patientType(getStr(json, "patient_type"))
+                    .firstName(getStr(json, "first_name"))
+                    .lastName(getStr(json, "last_name"))
+                    .dob(getStr(json, "dob"))
+                    .confirmAccurate(getBool(json, "confirm_accurate"))
+                    .agreePrivacy(getBool(json, "agree_privacy"))
+                    .redirectUrl(getStr(json, "redirect_url"))
+                    .relationship(getStr(json, "relationship"))
+                    .relationshipOther(getStr(json, "relationship_other"))
+                    .build();
 
-            String practiceId = getStr(json, "practice");
-            String monthYear = LocalDate.now().format(DateTimeFormatter.ofPattern("MM-yyyy"));
-            String partitionKey = practiceId + "_" + monthYear;
-            String rowKey = UUID.randomUUID().toString();
-            logger.info("Storing registration: partitionKey=" + partitionKey + ", rowKey=" + rowKey);
+            // Publish to queue
+            MessagePublisher publisher = MessagePublisherFactory.getPublisher();
+            logger.info("Publishing to queue: " + publisher.getType());
+            publisher.publish(registrationData, logger);
 
-            TableEntity entity = new TableEntity(partitionKey, rowKey)
-                    .addProperty("practice", practiceId)
-                    .addProperty("registrant", getStr(json, "registrant"))
-                    .addProperty("patientType", getStr(json, "patient_type"))
-                    .addProperty("firstName", getStr(json, "first_name"))
-                    .addProperty("lastName", getStr(json, "last_name"))
-                    .addProperty("dob", getStr(json, "dob"))
-                    .addProperty("confirmAccurate", getBool(json, "confirm_accurate"))
-                    .addProperty("agreePrivacy", getBool(json, "agree_privacy"))
-                    .addProperty("redirectUrl", getStr(json, "redirect_url"))
-                    .addProperty("relationship", getStr(json, "relationship"))
-                    .addProperty("relationshipOther", getStr(json, "relationship_other"))
-                    .addProperty("submittedAt", OffsetDateTime.now().toString());
+            // Mark token as used after successful publish
+            String scheduleLinkToken = SessionManager.getInstance().getTokenForSession(sessionId, logger);
+            if (scheduleLinkToken != null) {
+                String clientIp = getClientIp(request);
+                ScheduleLinkTokenProvider tokenProvider = ScheduleLinkTokenProviderFactory.getProvider();
+                tokenProvider.markAsUsed(scheduleLinkToken, clientIp, logger);
+            }
 
-            client.createEntity(entity);
-            logger.info("Registration stored successfully: " + partitionKey + "/" + rowKey);
+            // Invalidate session after successful registration
+            SessionManager.getInstance().invalidateSession(sessionId, logger);
 
+            String practiceId = registrationData.getPracticeId();
             String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
-            return jsonResponse(request, HttpStatus.CREATED,
-                    Map.of("id", rowKey, "redirect_url", Objects.toString(redirectUrl, "")));
+            // Return response with cookie cleared
+            return jsonResponseWithClearCookie(request, HttpStatus.CREATED,
+                    Map.of("id", registrationData.getId(), "redirect_url", Objects.toString(redirectUrl, "")));
 
-        } catch (IllegalStateException e) {
-            logger.severe("Configuration error: " + e.getMessage());
-            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
-                    Map.of("error", "Internal server error"));
         } catch (Exception e) {
-            logger.severe("Table Storage error: " + e.getClass().getName() + " - " + e.getMessage());
+            logger.severe("Error publishing to queue: " + e.getClass().getName() + " - " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Internal server error"));
         }
@@ -159,6 +143,7 @@ public class RegistrationFunction {
     private List<String> validate(JsonObject json) {
         List<String> errors = new ArrayList<>();
 
+        requireNonBlank(json, "client_id", "Client ID is required", errors);
         requireNonBlank(json, "first_name", "First name is required", errors);
         requireNonBlank(json, "last_name", "Last name is required", errors);
         requireNonBlank(json, "dob", "Date of birth is required", errors);
@@ -210,6 +195,15 @@ public class RegistrationFunction {
         return builder.build();
     }
 
+    private HttpResponseMessage jsonResponseWithClearCookie(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
+        HttpResponseMessage.Builder builder = request.createResponseBuilder(status)
+                .body(gson.toJson(body))
+                .header("Content-Type", "application/json")
+                .header("Set-Cookie", "DELTAV_SESSION=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict");
+        addCorsHeaders(builder, request);
+        return builder.build();
+    }
+
     private HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
         if (body != null) {
@@ -236,5 +230,57 @@ public class RegistrationFunction {
             if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
         return null;
+    }
+
+    /**
+     * Extract session ID from Cookie header.
+     * Cookie format: "DELTAV_SESSION=uuid; other=value"
+     */
+    private String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
+        String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
+        if (cookieHeader == null || cookieHeader.isBlank()) {
+            return null;
+        }
+
+        // Parse cookies: "name1=value1; name2=value2"
+        for (String cookie : cookieHeader.split(";")) {
+            String trimmed = cookie.trim();
+            if (trimmed.startsWith("DELTAV_SESSION=")) {
+                String sessionId = trimmed.substring("DELTAV_SESSION=".length()).trim();
+                logger.info("Found session ID in cookie");
+                return sessionId;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get client IP address from request headers.
+     * Checks X-Forwarded-For, X-Real-IP, and falls back to direct connection.
+     */
+    private String getClientIp(HttpRequestMessage<?> request) {
+        Map<String, String> headers = request.getHeaders();
+
+        // Check X-Forwarded-For (may contain multiple IPs, take the first)
+        String xff = getHeaderIgnoreCase(headers, "X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            String[] ips = xff.split(",");
+            return ips[0].trim();
+        }
+
+        // Check X-Real-IP
+        String realIp = getHeaderIgnoreCase(headers, "X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+
+        // Check CLIENT-IP
+        String clientIp = getHeaderIgnoreCase(headers, "CLIENT-IP");
+        if (clientIp != null && !clientIp.isBlank()) {
+            return clientIp.trim();
+        }
+
+        return "unknown";
     }
 }

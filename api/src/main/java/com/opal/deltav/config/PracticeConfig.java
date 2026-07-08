@@ -1,4 +1,4 @@
-package com.opal.deltav;
+package com.opal.deltav.config;
 
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import com.azure.storage.blob.BlobClient;

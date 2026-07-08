@@ -12,6 +12,12 @@ api/target/
 api/local.settings.json
 api/.azurite/
 
+# Python
+queue-worker-python/__pycache__/
+queue-worker-python/*.pyc
+queue-worker-python/.venv/
+queue-worker-python/.env
+
 # OS
 .DS_Store
 Thumbs.db
