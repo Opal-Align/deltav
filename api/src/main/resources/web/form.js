@@ -8,9 +8,9 @@
   var practiceId = new URLSearchParams(window.location.search).get("practice") || "";
 
   // ── Branding & patient — populated from API ───────────────────────────────
-  var practiceName    = "";  // API variable: practice_name
-  var practiceLogoUrl = "";  // API variable: practice_logo_url
-  var patientFirstName = ""; // API variable: patient_first_name
+  var practiceName    = `${practice_name}`;  // API variable: practice_name
+  var practiceLogoUrl = `${practice_logo_url}`;  // API variable: practice_logo_url
+  var patientFirstName = `${patient_first_name}`; // API variable: patient_first_name
 
   function applyBranding() {
     if (practiceName) {
