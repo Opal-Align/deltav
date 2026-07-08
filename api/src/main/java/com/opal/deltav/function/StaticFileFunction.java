@@ -148,25 +148,6 @@ public class StaticFileFunction {
         return builder;
     }
 
-    private static String maskPhoneNumber(String phone) {
-        if (phone == null || phone.isBlank()) {
-            return "";
-        }
-        // Remove non-digit characters for masking
-        String digits = phone.replaceAll("[^0-9]", "");
-        if (digits.length() <= 4) {
-            return phone; // Too short to mask
-        }
-        // Show only last 4 digits, mask the rest with asterisks
-        int maskLength = digits.length() - 4;
-        String masked = "*".repeat(maskLength) + digits.substring(maskLength);
-        // Format as ***-***-1234 if 10 digits
-        if (masked.length() == 10) {
-            return masked.substring(0, 3) + "-" + masked.substring(3, 6) + "-" + masked.substring(6);
-        }
-        return masked;
-    }
-
     /**
      * Handle token-based request (e.g., /<token>).
      * Validates token against table storage and serves index.html.
@@ -229,10 +210,9 @@ public class StaticFileFunction {
                 html = html.replace("${practice_name}", practiceName);
             }
 
-            // Inject masked phone number into hidden field
+            // Inject full on-file phone number into hidden field (masking/formatting is done client-side)
             String mobileNumber = validationResult.token.getMobileNumber();
-            String maskedPhone = maskPhoneNumber(mobileNumber);
-            html = html.replace("${phone_number}", maskedPhone);
+            html = html.replace("${phone_number}", mobileNumber == null ? "" : mobileNumber);
 
             String inject = "<script>window.DELTAV_TOKEN='" + registrationToken + "';window.DELTAV_TOKEN_EXP=" + exp + ";</script>";
             if (html.contains("</head>")) {

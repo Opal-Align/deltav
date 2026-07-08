@@ -252,6 +252,7 @@
   var resendLocked = false;
 
   var otpModal = document.getElementById("otp-modal");
+  var onfilePhoneInput = document.getElementById("onfile-phone");
   var mobileInput = document.getElementById("mobile-number");
   var otpInput = document.getElementById("otp-code");
   var otpSendBtn = document.getElementById("otp-send-btn");
@@ -291,6 +292,29 @@
   function clearOtpErrors() {
     showOtpError("err-mobile", "");
     showOtpError("err-otp", "");
+  }
+
+  // Full on-file number (server-injected), normalized to 10 US digits. "" when absent.
+  function getOnfilePhoneDigits() {
+    var v = onfilePhoneInput ? (onfilePhoneInput.value || "").trim() : "";
+    // Ignore an unsubstituted server placeholder or empty value
+    if (!v || v === "${phone_number}") return "";
+    return normalizeMobileDigits(v);
+  }
+
+  // Prefill the mobile field with a masked, read-only on-file number when available.
+  // The real number is still sent on submit (see sendOtp). Falls back to a normal
+  // editable field when there is no number on file, preserving existing behaviour.
+  function applyPhone() {
+    if (!mobileInput) return;
+    var digits = getOnfilePhoneDigits();
+    if (digits.length === 10) {
+      mobileInput.value = "(XXX) XXX-" + digits.slice(6);
+      mobileInput.setAttribute("readonly", "readonly");
+    } else {
+      mobileInput.value = "";
+      mobileInput.removeAttribute("readonly");
+    }
   }
 
   function stopOtpTimer() {
@@ -356,6 +380,7 @@
     resendLocked = false;
     sessionId = null;
     resetOtpModalSteps();
+    applyPhone();
     if (otpResendBtn) {
       otpResendBtn.disabled = true;
       otpResendBtn.textContent = "Resend OTP";
@@ -452,7 +477,12 @@
 
   function sendOtp() {
     clearOtpErrors();
-    var mobile = normalizeMobileDigits(mobileInput ? mobileInput.value : "");
+    // Prefer the real on-file number (the field only shows a masked version);
+    // fall back to whatever the user typed when there's no number on file.
+    var onfile = getOnfilePhoneDigits();
+    var mobile = onfile.length === 10
+      ? onfile
+      : normalizeMobileDigits(mobileInput ? mobileInput.value : "");
     if (mobile.length !== 10) {
       showOtpError("err-mobile", "Please enter a valid 10-digit mobile number.");
       return;
