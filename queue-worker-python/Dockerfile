@@ -1,11 +1,5 @@
 # Build stage - install dependencies
-FROM python:3.11-alpine AS builder
-
-# Install build dependencies for pyodbc
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    unixodbc-dev
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 COPY requirements.txt .
@@ -13,20 +7,19 @@ RUN pip install --no-cache-dir --target=/app/deps -r requirements.txt
 
 
 # Runtime stage
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
 # Install ODBC Driver for SQL Server
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
-    unixodbc
-
-# Install Microsoft ODBC Driver 18
-RUN curl -O https://download.microsoft.com/download/1/f/f/1fffeb70-1dd2-4ae3-85c8-5eb25789d82e/msodbcsql18_18.3.3.1-1_amd64.apk && \
-    curl -O https://download.microsoft.com/download/1/f/f/1fffeb70-1dd2-4ae3-85c8-5eb25789d82e/mssql-tools18_18.3.1.1-1_amd64.apk && \
-    apk add --allow-untrusted msodbcsql18_18.3.3.1-1_amd64.apk && \
-    apk add --allow-untrusted mssql-tools18_18.3.1.1-1_amd64.apk && \
-    rm -f *.apk
+    unixodbc \
+    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+    && curl -fsSL https://packages.microsoft.com/config/debian/12/prod.list | tee /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -38,8 +31,8 @@ ENV PYTHONPATH=/app/deps
 COPY worker.py .
 
 # Create non-root user
-RUN addgroup -g 1001 appgroup && \
-    adduser -u 1001 -G appgroup -D appuser && \
+RUN groupadd -g 1001 appgroup && \
+    useradd -u 1001 -g appgroup -m appuser && \
     chown -R appuser:appgroup /app
 
 USER appuser
