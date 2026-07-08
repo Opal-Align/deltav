@@ -1,6 +1,6 @@
 package com.opal.deltav.streaming;
 
-import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.model.QueueMessage;
 import java.util.logging.Logger;
 
 /**
@@ -10,8 +10,8 @@ import java.util.logging.Logger;
 public class NoOpPublisher implements MessagePublisher {
 
     @Override
-    public void publish(RegistrationData data, Logger logger) {
-        logger.fine("Streaming disabled, skipping message publish for: " + data.getId());
+    public void publish(QueueMessage message, String clientId, Logger logger) {
+        logger.fine("Streaming disabled, skipping message publish for patientKey: " + message.getPatientKey());
     }
 
     @Override

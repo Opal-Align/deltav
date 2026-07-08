@@ -170,12 +170,6 @@ class QueueWorker:
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     continue
 
-                # Check if message has id field
-                if not data.get('id'):
-                    logger.error(f"[{self.client_id}] Missing 'id' field in message, deleting: {msg.id}")
-                    self.queue_client.delete_message(msg.id, msg.pop_receipt)
-                    continue
-
                 # Validate mandatory fields
                 missing_fields = self._validate_message(data)
                 if missing_fields:

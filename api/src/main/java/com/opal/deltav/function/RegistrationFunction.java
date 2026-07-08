@@ -6,7 +6,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.opal.deltav.config.PracticeConfig;
-import com.opal.deltav.model.RegistrationData;
+import com.opal.deltav.model.QueueMessage;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkToken;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
 import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
@@ -116,28 +116,18 @@ public class RegistrationFunction {
         try {
             // Get data from token (Azure Table)
             String clientId = tokenData.getClientId() != null ? String.valueOf(tokenData.getClientId()) : "";
-            String practiceId = tokenData.getPracticeId() != null ? String.valueOf(tokenData.getPracticeId()) : "";
-            String mobileNumber = tokenData.getMobileNumber() != null ? tokenData.getMobileNumber() : "";
+            Long practiceId = tokenData.getPracticeId();
+            Long patientKey = tokenData.getPatientKey();
 
-            // Get preferred slots from request
+            // Get preferred slots and comments from request
             List<String> preferredSlots = getStringList(json, "preferred_slots");
             String comments = getStr(json, "comments");
 
-            // Build registration data
-            RegistrationData registrationData = RegistrationData.builder()
-                    .clientId(clientId)
+            // Build queue message with only required fields
+            QueueMessage queueMessage = QueueMessage.builder()
+                    .patientKey(patientKey)
+                    .patientId(patientKey != null ? String.valueOf(patientKey) : null)
                     .practiceId(practiceId)
-                    .mobileNumber(mobileNumber)
-                    .registrant("")  // Not provided in new payload
-                    .patientType("") // Not provided in new payload
-                    .firstName("")   // Not provided in new payload
-                    .lastName("")    // Not provided in new payload
-                    .dob("")         // Not provided in new payload
-                    .confirmAccurate(true) // Implied by submission
-                    .agreePrivacy(getBool(json, "agree_privacy"))
-                    .redirectUrl("") // Will be resolved from practice config
-                    .relationship("")
-                    .relationshipOther("")
                     .preferredSlots(preferredSlots)
                     .comments(comments)
                     .build();
@@ -145,7 +135,7 @@ public class RegistrationFunction {
             // Publish to queue
             MessagePublisher publisher = MessagePublisherFactory.getPublisher();
             logger.info("Publishing to queue: " + publisher.getType());
-            publisher.publish(registrationData, logger);
+            publisher.publish(queueMessage, clientId, logger);
 
             // Mark token as used after successful publish
             String clientIp = getClientIp(request);
@@ -154,12 +144,12 @@ public class RegistrationFunction {
             // Invalidate session after successful registration
             SessionManager.getInstance().invalidateSession(sessionId, logger);
 
-            String redirectUrl = PracticeConfig.getRedirectUrl(practiceId);
+            String redirectUrl = PracticeConfig.getRedirectUrl(String.valueOf(practiceId));
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
             // Return response with cookie cleared
             return jsonResponseWithClearCookie(request, HttpStatus.CREATED,
-                    Map.of("id", registrationData.getId(), "redirect_url", Objects.toString(redirectUrl, "")));
+                    Map.of("success", true, "redirect_url", Objects.toString(redirectUrl, "")));
 
         } catch (Exception e) {
             logger.severe("Error publishing to queue: " + e.getClass().getName() + " - " + e.getMessage());
