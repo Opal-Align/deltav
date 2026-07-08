@@ -1,7 +1,11 @@
 package com.opal.deltav.schedulelinktoken;
 
+import com.opal.deltav.util.ScheduleLinkPiiCrypto;
+import com.opal.deltav.util.ScheduleLinkPiiPayload;
+
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Model for schedule link token data.
@@ -26,6 +30,20 @@ public class ScheduleLinkToken {
     private String practiceName;
     private String logoBlobPath;
     private String mobileNumber;
+
+    // Encrypted PII fields (from Azure Table)
+    private String piiPayloadEnc;
+    private String piiPayloadIv;
+    private String piiPayloadKeyId;
+
+    // Decrypted PII fields
+    private String smsPhone;
+    private String patientId;
+    private String patientFirstName;
+    private String patientLastName;
+    private String guarantorFirstName;
+    private String guarantorLastName;
+    private String dob;
 
     public ScheduleLinkToken() {
     }
@@ -93,7 +111,57 @@ public class ScheduleLinkToken {
         token.practiceName = getStringValue(map, "practice_name");
         token.logoBlobPath = getStringValue(map, "logo_blob_path");
 
+        // Read encrypted PII fields
+        token.piiPayloadEnc = getStringValue(map, "pii_payload_enc");
+        token.piiPayloadIv = getStringValue(map, "pii_payload_iv");
+        token.piiPayloadKeyId = getStringValue(map, "pii_payload_key_id");
+
         return token;
+    }
+
+    /**
+     * Decrypt PII payload and populate decrypted fields.
+     * Call this after loading token from table storage.
+     *
+     * @param dek Data Encryption Key (32 bytes)
+     * @param logger Logger for error messages
+     * @return true if decryption succeeded, false if no encrypted payload or decryption failed
+     */
+    public boolean decryptPii(byte[] dek, Logger logger) {
+        if (piiPayloadEnc == null || piiPayloadEnc.isBlank() ||
+            piiPayloadIv == null || piiPayloadIv.isBlank()) {
+            // No encrypted payload - PII may be stored in plain text fields
+            return false;
+        }
+
+        try {
+            ScheduleLinkPiiPayload payload = ScheduleLinkPiiCrypto.decryptPayload(piiPayloadEnc, piiPayloadIv, dek);
+            this.smsPhone = payload.getSmsPhone();
+            this.patientId = payload.getPatientId();
+            this.patientFirstName = payload.getPatientFirstName();
+            this.patientLastName = payload.getPatientLastName();
+            this.guarantorFirstName = payload.getGuarantorFirstName();
+            this.guarantorLastName = payload.getGuarantorLastName();
+            this.dob = payload.getDob();
+
+            // If mobileNumber is not set, use smsPhone from decrypted payload
+            if ((this.mobileNumber == null || this.mobileNumber.isBlank()) && this.smsPhone != null) {
+                this.mobileNumber = this.smsPhone;
+            }
+
+            return true;
+        } catch (Exception e) {
+            logger.warning("Failed to decrypt PII payload: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Check if encrypted PII payload is present.
+     */
+    public boolean hasEncryptedPii() {
+        return piiPayloadEnc != null && !piiPayloadEnc.isBlank() &&
+               piiPayloadIv != null && !piiPayloadIv.isBlank();
     }
 
     private static String getStringValue(Map<String, Object> map, String key) {
@@ -207,6 +275,35 @@ public class ScheduleLinkToken {
 
     public String getLogoBlobPath() {
         return logoBlobPath;
+    }
+
+    // Decrypted PII getters
+    public String getSmsPhone() {
+        return smsPhone;
+    }
+
+    public String getPatientId() {
+        return patientId;
+    }
+
+    public String getPatientFirstName() {
+        return patientFirstName;
+    }
+
+    public String getPatientLastName() {
+        return patientLastName;
+    }
+
+    public String getGuarantorFirstName() {
+        return guarantorFirstName;
+    }
+
+    public String getGuarantorLastName() {
+        return guarantorLastName;
+    }
+
+    public String getDob() {
+        return dob;
     }
 
     // Setters

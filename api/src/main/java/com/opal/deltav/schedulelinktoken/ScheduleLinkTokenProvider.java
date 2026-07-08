@@ -1,5 +1,7 @@
 package com.opal.deltav.schedulelinktoken;
 
+import com.opal.deltav.util.KeyVaultService;
+
 import java.util.Map;
 import java.util.function.Function;
 import java.util.logging.Logger;
@@ -61,6 +63,7 @@ public interface ScheduleLinkTokenProvider {
 
     /**
      * Validate token - checks existence, expiry, status, and revocation.
+     * Also decrypts PII payload if encrypted and DEK is available.
      *
      * @param key the key/identifier
      * @param logger the logger
@@ -74,6 +77,17 @@ public interface ScheduleLinkTokenProvider {
         if (!token.isValid()) {
             return new ValidationResult(false, token.getValidationError());
         }
+
+        // Decrypt PII payload if present and DEK is available
+        if (token.hasEncryptedPii()) {
+            byte[] dek = KeyVaultService.getDek(logger);
+            if (dek != null) {
+                token.decryptPii(dek, logger);
+            } else {
+                logger.warning("Encrypted PII present but DEK not available - PII fields will be null");
+            }
+        }
+
         return new ValidationResult(true, null, token);
     }
 
