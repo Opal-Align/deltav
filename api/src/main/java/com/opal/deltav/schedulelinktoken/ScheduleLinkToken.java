@@ -11,6 +11,7 @@ public class ScheduleLinkToken {
     private String tokenHash;
     private Long patientKey;
     private Long practiceId;
+    private Long clientId;
     private Long probFactKey;
     private Long communicationLogId;
     private String status;
@@ -24,8 +25,10 @@ public class ScheduleLinkToken {
     private String createdByUserId;
     private String practiceName;
     private String logoBlobPath;
+    private String mobileNumber;
 
-    public ScheduleLinkToken() {}
+    public ScheduleLinkToken() {
+    }
 
     /**
      * Check if token is valid (active and not expired).
@@ -74,6 +77,8 @@ public class ScheduleLinkToken {
         token.tokenHash = getStringValue(map, "token_hash");
         token.patientKey = getLongValue(map, "patient_key");
         token.practiceId = getLongValue(map, "practice_id");
+        token.clientId = getLongValue(map, "client_id");
+        token.mobileNumber = getStringValue(map, "mobile_number");
         token.probFactKey = getLongValue(map, "prob_fact_key");
         token.communicationLogId = getLongValue(map, "communication_log_id");
         token.status = getStringValue(map, "status");
@@ -132,38 +137,148 @@ public class ScheduleLinkToken {
     }
 
     // Getters
-    public String getTokenHash() { return tokenHash; }
-    public Long getPatientKey() { return patientKey; }
-    public Long getPracticeId() { return practiceId; }
-    public Long getProbFactKey() { return probFactKey; }
-    public Long getCommunicationLogId() { return communicationLogId; }
-    public String getStatus() { return status; }
-    public OffsetDateTime getExpiresAt() { return expiresAt; }
-    public Integer getAttemptCount() { return attemptCount; }
-    public String getLastSeenIp() { return lastSeenIp; }
-    public OffsetDateTime getUsedAt() { return usedAt; }
-    public OffsetDateTime getRevokedAt() { return revokedAt; }
-    public String getRevokedReason() { return revokedReason; }
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public String getCreatedByUserId() { return createdByUserId; }
-    public String getPracticeName() { return practiceName; }
-    public String getLogoBlobPath() { return logoBlobPath; }
+    public String getTokenHash() {
+        return tokenHash;
+    }
+
+    public Long getPatientKey() {
+        return patientKey;
+    }
+
+    public Long getPracticeId() {
+        return practiceId;
+    }
+
+    public Long getClientId() {
+        return clientId;
+    }
+
+    public String getMobileNumber() {
+        return mobileNumber;
+    }
+
+    public Long getProbFactKey() {
+        return probFactKey;
+    }
+
+    public Long getCommunicationLogId() {
+        return communicationLogId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public OffsetDateTime getExpiresAt() {
+        return expiresAt;
+    }
+
+    public Integer getAttemptCount() {
+        return attemptCount;
+    }
+
+    public String getLastSeenIp() {
+        return lastSeenIp;
+    }
+
+    public OffsetDateTime getUsedAt() {
+        return usedAt;
+    }
+
+    public OffsetDateTime getRevokedAt() {
+        return revokedAt;
+    }
+
+    public String getRevokedReason() {
+        return revokedReason;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public String getCreatedByUserId() {
+        return createdByUserId;
+    }
+
+    public String getPracticeName() {
+        return practiceName;
+    }
+
+    public String getLogoBlobPath() {
+        return logoBlobPath;
+    }
 
     // Setters
-    public void setTokenHash(String tokenHash) { this.tokenHash = tokenHash; }
-    public void setPatientKey(Long patientKey) { this.patientKey = patientKey; }
-    public void setPracticeId(Long practiceId) { this.practiceId = practiceId; }
-    public void setProbFactKey(Long probFactKey) { this.probFactKey = probFactKey; }
-    public void setCommunicationLogId(Long communicationLogId) { this.communicationLogId = communicationLogId; }
-    public void setStatus(String status) { this.status = status; }
-    public void setExpiresAt(OffsetDateTime expiresAt) { this.expiresAt = expiresAt; }
-    public void setAttemptCount(Integer attemptCount) { this.attemptCount = attemptCount; }
-    public void setLastSeenIp(String lastSeenIp) { this.lastSeenIp = lastSeenIp; }
-    public void setUsedAt(OffsetDateTime usedAt) { this.usedAt = usedAt; }
-    public void setRevokedAt(OffsetDateTime revokedAt) { this.revokedAt = revokedAt; }
-    public void setRevokedReason(String revokedReason) { this.revokedReason = revokedReason; }
-    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
-    public void setCreatedByUserId(String createdByUserId) { this.createdByUserId = createdByUserId; }
-    public void setPracticeName(String practiceName) { this.practiceName = practiceName; }
-    public void setLogoBlobPath(String logoBlobPath) { this.logoBlobPath = logoBlobPath; }
+    public void setTokenHash(String tokenHash) {
+        this.tokenHash = tokenHash;
+    }
+
+    public void setPatientKey(Long patientKey) {
+        this.patientKey = patientKey;
+    }
+
+    public void setPracticeId(Long practiceId) {
+        this.practiceId = practiceId;
+    }
+
+    public void setClientId(Long clientId) {
+        this.clientId = clientId;
+    }
+
+    public void setMobileNumber(String mobileNumber) {
+        this.mobileNumber = mobileNumber;
+    }
+
+    public void setProbFactKey(Long probFactKey) {
+        this.probFactKey = probFactKey;
+    }
+
+    public void setCommunicationLogId(Long communicationLogId) {
+        this.communicationLogId = communicationLogId;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public void setExpiresAt(OffsetDateTime expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    public void setAttemptCount(Integer attemptCount) {
+        this.attemptCount = attemptCount;
+    }
+
+    public void setLastSeenIp(String lastSeenIp) {
+        this.lastSeenIp = lastSeenIp;
+    }
+
+    public void setUsedAt(OffsetDateTime usedAt) {
+        this.usedAt = usedAt;
+    }
+
+    public void setRevokedAt(OffsetDateTime revokedAt) {
+        this.revokedAt = revokedAt;
+    }
+
+    public void setRevokedReason(String revokedReason) {
+        this.revokedReason = revokedReason;
+    }
+
+    public void setCreatedAt(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public void setCreatedByUserId(String createdByUserId) {
+        this.createdByUserId = createdByUserId;
+    }
+
+    public void setPracticeName(String practiceName) {
+        this.practiceName = practiceName;
+    }
+
+    public void setLogoBlobPath(String logoBlobPath) {
+        this.logoBlobPath = logoBlobPath;
+    }
 }

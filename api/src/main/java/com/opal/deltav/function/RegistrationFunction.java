@@ -95,8 +95,8 @@ public class RegistrationFunction {
         try {
             // Build registration data
             RegistrationData registrationData = RegistrationData.builder()
-                    .clientId(getStr(json, "client_id"))
-                    .practiceId(getStr(json, "practice_id"))
+                    .clientId("101")
+                    .practiceId(getStr(json, "1012"))
                     .registrant(getStr(json, "registrant"))
                     .patientType(getStr(json, "patient_type"))
                     .firstName(getStr(json, "first_name"))
