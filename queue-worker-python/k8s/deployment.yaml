@@ -4,7 +4,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: queue-worker-${CLIENT_ID}
-  namespace: ${NAMESPACE}
   labels:
     app: queue-worker
     client: ${CLIENT_ID}

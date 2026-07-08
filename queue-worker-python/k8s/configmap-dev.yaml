@@ -2,7 +2,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: queue-worker-config
-  namespace: ${NAMESPACE}
 data:
   POLL_INTERVAL: "1.0"
   BATCH_SIZE: "16"

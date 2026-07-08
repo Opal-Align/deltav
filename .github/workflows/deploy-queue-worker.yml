@@ -7,17 +7,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
-        required: true
-        type: choice
-        options:
-          - dev
-          - main
-      client_id:
-        description: 'Client ID for the queue worker'
-        required: true
-        type: string
       namespace:
         description: 'Kubernetes namespace'
         required: true
@@ -26,13 +15,38 @@ on:
           - marquee-test
           - marquee
           - default
+      environment:
+        description: 'Environment (dev/main)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - main
+      client_id:
+        description: 'Client ID for the queue worker'
+        required: true
+        type: string
       sql_database:
         description: 'SQL Database name'
         required: true
         type: string
+      rollout_deployment:
+        description: 'Trigger rollout of deployment'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
-  IMAGE_NAME: queue-worker-python
+  NAMESPACE: ${{ github.event.inputs.namespace }}
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  MODULE_DIR: queue-worker-python
+  IMAGE_TAG: latest
+  IMAGE_NAME: queue-worker-python-${{ github.event.inputs.environment }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
 
 jobs:
   build-and-deploy:
@@ -43,70 +57,68 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Print Deploy Info
+      - name: Print Environment Info
         run: |
           echo "Environment: ${{ github.event.inputs.environment }}"
-          echo "Client ID: ${{ github.event.inputs.client_id }}"
           echo "Namespace: ${{ github.event.inputs.namespace }}"
+          echo "Client ID: ${{ github.event.inputs.client_id }}"
           echo "SQL Database: ${{ github.event.inputs.sql_database }}"
+          echo "Registry: ${{ env.IMAGE_REGISTRY }}"
+          echo "Image Name: ${{ env.IMAGE_NAME }}"
+
+      - name: Log in to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ vars.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build Docker Image
+        working-directory: ${{ env.MODULE_DIR }}
+        run: docker build -t ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} .
+
+      - name: Push Docker Image
+        run: docker push ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
           tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
           client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
-          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
+          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRITION }}
 
-      - name: Login to ACR
-        run: |
-          az acr login --name ${{ vars.ACR_NAME }}
-
-      - name: Build and Push Docker Image
-        working-directory: queue-worker-python
-        env:
-          FULL_IMAGE_NAME: ${{ vars.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}-${{ github.event.inputs.environment }}
-        run: |
-          docker build -t $FULL_IMAGE_NAME:${{ github.sha }} .
-          docker build -t $FULL_IMAGE_NAME:latest .
-          docker push $FULL_IMAGE_NAME:${{ github.sha }}
-          docker push $FULL_IMAGE_NAME:latest
-
-      - name: Get AKS Credentials
-        run: |
-          az aks get-credentials \
-            --resource-group ${{ vars.AKS_RESOURCE_GROUP }} \
-            --name ${{ vars.AKS_CLUSTER_NAME }}
+      - name: Set AKS Context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RG_NAME }}
+          cluster-name: ${{ vars.AKS_CLUSTER_NAME }}
 
       - name: Deploy Service Account
-        working-directory: queue-worker-python/k8s
-        env:
-          NAMESPACE: ${{ github.event.inputs.namespace }}
+        working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
-          envsubst < service-account-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+          kubectl apply -f service-account-${{ env.ENVIRONMENT }}.yaml -n ${{ env.NAMESPACE }}
 
       - name: Deploy ConfigMap
-        working-directory: queue-worker-python/k8s
-        env:
-          NAMESPACE: ${{ github.event.inputs.namespace }}
+        working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
-          envsubst < configmap-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+          kubectl apply -f configmap-${{ env.ENVIRONMENT }}.yaml -n ${{ env.NAMESPACE }}
 
       - name: Deploy Secret
-        working-directory: queue-worker-python/k8s
-        env:
-          CLIENT_ID: ${{ github.event.inputs.client_id }}
-          NAMESPACE: ${{ github.event.inputs.namespace }}
-          SQL_DATABASE: ${{ github.event.inputs.sql_database }}
+        working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
-          envsubst < secret-${{ github.event.inputs.environment }}.yaml | kubectl apply -f -
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export SQL_DATABASE=${{ github.event.inputs.sql_database }}
+          envsubst < secret-${{ env.ENVIRONMENT }}.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
 
       - name: Deploy to AKS
-        working-directory: queue-worker-python/k8s
-        env:
-          CLIENT_ID: ${{ github.event.inputs.client_id }}
-          NAMESPACE: ${{ github.event.inputs.namespace }}
-          REGISTRY_URL: ${{ vars.ACR_NAME }}.azurecr.io
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}-${{ github.event.inputs.environment }}
+        working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
-          envsubst < deployment.yaml | kubectl apply -f -
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          envsubst < deployment.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
+
+      - name: Restart Deployment in AKS
+        if: ${{ github.event.inputs.rollout_deployment == 'true' }}
+        run: kubectl rollout restart deployment/queue-worker-${{ github.event.inputs.client_id }} -n ${{ env.NAMESPACE }}
