@@ -32,7 +32,7 @@ public class SessionManager {
      * Create a new session for a practice.
      *
      * @param practiceId the practice ID
-     * @param logger the logger
+     * @param logger     the logger
      * @return the created session ID
      */
     public String createSession(String practiceId, Logger logger) {
@@ -43,12 +43,12 @@ public class SessionManager {
      * Create a new session with associated token.
      *
      * @param practiceId the practice ID
-     * @param token the schedule link token associated with this session
-     * @param logger the logger
+     * @param token      the schedule link token associated with this session
+     * @param logger     the logger
      * @return the created session ID
      */
     public String createSession(String practiceId, String token, Logger logger) {
-        String sessionId = RedisSessionService.createSession(practiceId, token);
+        String sessionId = RedisSessionService.createSession(practiceId, token, logger);
         logger.info("Created session: " + sessionId + " for practice: " + practiceId);
         return sessionId;
     }
@@ -57,14 +57,14 @@ public class SessionManager {
      * Verify if a session is valid (exists and OTP is verified).
      *
      * @param sessionId the session ID to verify
-     * @param logger the logger
+     * @param logger    the logger
      * @return true if session is valid and OTP verified
      */
     public boolean isValidSession(String sessionId, Logger logger) {
         if (sessionId == null || sessionId.isBlank()) {
             return false;
         }
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
         if (session == null) {
             logger.info("Session not found: " + sessionId);
             return false;
@@ -78,14 +78,14 @@ public class SessionManager {
      * Get the token associated with a session.
      *
      * @param sessionId the session ID
-     * @param logger the logger
+     * @param logger    the logger
      * @return the associated token, or null if not found
      */
     public String getTokenForSession(String sessionId, Logger logger) {
         if (sessionId == null || sessionId.isBlank()) {
             return null;
         }
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
         if (session == null) {
             logger.info("Session not found for token lookup: " + sessionId);
             return null;
@@ -97,22 +97,22 @@ public class SessionManager {
      * Invalidate/delete a session.
      *
      * @param sessionId the session ID to invalidate
-     * @param logger the logger
+     * @param logger    the logger
      */
     public void invalidateSession(String sessionId, Logger logger) {
         logger.info("Invalidating session: " + sessionId);
-        RedisSessionService.invalidateSession(sessionId);
+        RedisSessionService.invalidateSession(sessionId, logger);
     }
 
     /**
      * Extend session expiry.
      *
-     * @param sessionId the session ID
+     * @param sessionId  the session ID
      * @param ttlSeconds new time to live in seconds
-     * @param logger the logger
+     * @param logger     the logger
      */
     public void extendSession(String sessionId, long ttlSeconds, Logger logger) {
         logger.info("Extending session " + sessionId + " TTL to " + ttlSeconds + "s");
-        RedisSessionService.extendSession(sessionId, (int) ttlSeconds);
+        RedisSessionService.extendSession(sessionId, (int) ttlSeconds, logger);
     }
 }

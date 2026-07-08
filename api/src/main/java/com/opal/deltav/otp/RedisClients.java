@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 
 /**
  * Redis client pool supporting both managed identity and connection string authentication.
- *
+ * <p>
  * Configuration priority:
  * 1. If REDIS_HOST is set -> uses managed identity (Azure Cache for Redis with Entra ID)
  * 2. Else if REDIS_URL is set -> uses connection string
@@ -20,26 +20,26 @@ import java.util.logging.Logger;
  */
 final class RedisClients {
 
-    private static final Logger logger = Logger.getLogger(RedisClients.class.getName());
     private static final String REDIS_SCOPE = "https://redis.azure.com/.default";
 
     private static volatile JedisPool pool;
     private static final Object poolLock = new Object();
 
-    private RedisClients() {}
+    private RedisClients() {
+    }
 
-    static JedisPool getPool() {
+    static JedisPool getPool(Logger logger) {
         if (pool == null) {
             synchronized (poolLock) {
                 if (pool == null) {
-                    pool = createPool();
+                    pool = createPool(logger);
                 }
             }
         }
         return pool;
     }
 
-    private static JedisPool createPool() {
+    private static JedisPool createPool(Logger logger) {
         String redisHost = System.getenv("REDIS_HOST");
         String redisUrl = System.getenv("REDIS_URL");
 
@@ -50,7 +50,7 @@ final class RedisClients {
         if (redisHost != null && !redisHost.isBlank()) {
             // Use managed identity for Azure Cache for Redis
             logger.info("Initializing Redis client with managed identity");
-            return createManagedIdentityPool(redisHost, poolConfig);
+            return createManagedIdentityPool(redisHost, poolConfig, logger);
         } else if (redisUrl != null && !redisUrl.isBlank()) {
             // Use connection string
             logger.info("Initializing Redis client with connection string");
@@ -60,7 +60,7 @@ final class RedisClients {
         }
     }
 
-    private static JedisPool createManagedIdentityPool(String redisHost, JedisPoolConfig poolConfig) {
+    private static JedisPool createManagedIdentityPool(String redisHost, JedisPoolConfig poolConfig, Logger logger) {
         // For Redis Entra ID auth, username is the Object ID (Principal ID) of the managed identity
         // Priority: REDIS_USER > MSI_OBJECT_ID > AZURE_CLIENT_ID
         String redisUser = System.getenv("REDIS_USER");
@@ -72,8 +72,8 @@ final class RedisClients {
         }
         if (redisUser == null || redisUser.isBlank()) {
             throw new IllegalStateException(
-                "REDIS_USER must be set to the Object ID of the system-assigned managed identity. " +
-                "Find it in Azure Portal > Function App > Identity > System assigned > Object (principal) ID");
+                    "REDIS_USER must be set to the Object ID of the system-assigned managed identity. " +
+                            "Find it in Azure Portal > Function App > Identity > System assigned > Object (principal) ID");
         }
 
         int redisPort = 6380; // Default SSL port for Azure Redis

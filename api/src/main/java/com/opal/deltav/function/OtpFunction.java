@@ -41,7 +41,7 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
         }
 
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
         if (session == null) {
             logger.warning("OTP send rejected: invalid session " + sessionId);
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
@@ -69,7 +69,7 @@ public class OtpFunction {
                 if (phoneE164 == null) {
                     return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
                 }
-                session = RedisSessionService.bindMobile(sessionId, session.practiceId, phoneE164);
+                session = RedisSessionService.bindMobile(sessionId, session.practiceId, phoneE164, logger);
                 enforceCooldown = false;
             }
 
@@ -105,7 +105,7 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
         }
 
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
         if (session == null) {
             logger.warning("OTP verify rejected: invalid session " + sessionId);
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
@@ -130,7 +130,7 @@ public class OtpFunction {
         String otp = getString(json, "otp");
 
         try {
-            RedisOtpService.VerifyResult result = RedisOtpService.verifyOtp(sessionId, otp);
+            RedisOtpService.VerifyResult result = RedisOtpService.verifyOtp(sessionId, otp, logger);
             if (result.verified) {
                 return jsonResponse(request, HttpStatus.OK, Map.of(
                         "verified", true,
@@ -158,7 +158,7 @@ public class OtpFunction {
 
     private static HttpResponseMessage deliverOtp(HttpRequestMessage<Optional<String>> request, Logger logger,
                                                   RegistrationSession session, boolean enforceCooldown) {
-        RedisOtpService.SendResult result = RedisOtpService.sendOtp(session, enforceCooldown);
+        RedisOtpService.SendResult result = RedisOtpService.sendOtp(session, enforceCooldown, logger);
         if (!result.success) {
             if ("resend_throttled".equals(result.error)) {
                 return jsonResponse(request, HttpStatus.TOO_MANY_REQUESTS, Map.of(
@@ -172,7 +172,7 @@ public class OtpFunction {
         }
 
         if (!SmsOtpSender.isConfigured() && !isPocMode()) {
-            RedisOtpService.clearOtp(session.sessionId);
+            RedisOtpService.clearOtp(session.sessionId, logger);
             logger.severe("SMS is not configured and OTP_POC_MODE is disabled");
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "sms_not_configured"));
         }
@@ -180,7 +180,7 @@ public class OtpFunction {
         SmsOtpSender.SmsDeliveryResult smsResult =
                 SmsOtpSender.sendOtpToE164(session.practiceId, session.phoneE164, result.otp);
         if (!smsResult.sent && !smsResult.skipped) {
-            RedisOtpService.clearOtp(session.sessionId);
+            RedisOtpService.clearOtp(session.sessionId, logger);
             return jsonResponse(request, HttpStatus.BAD_GATEWAY,
                     Map.of("error", "sms_send_failed", "message", "Could not send OTP. Please try again."));
         }

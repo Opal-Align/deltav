@@ -5,6 +5,7 @@ import com.opal.deltav.util.PhoneUtil;
 import redis.clients.jedis.Jedis;
 
 import java.security.SecureRandom;
+import java.util.logging.Logger;
 
 /**
  * Session-scoped OTP storage in Redis.
@@ -24,7 +25,8 @@ public final class RedisOtpService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private RedisOtpService() {}
+    private RedisOtpService() {
+    }
 
     public static String normalizePracticeId(String practiceId) {
         if (practiceId == null) return null;
@@ -38,7 +40,7 @@ public final class RedisOtpService {
         return PhoneUtil.normalizeMobile(mobile);
     }
 
-    public static SendResult sendOtp(RegistrationSession session, boolean enforceCooldown) {
+    public static SendResult sendOtp(RegistrationSession session, boolean enforceCooldown, Logger logger) {
         if (session == null || !session.isMobileBound()) {
             return SendResult.invalidSession();
         }
@@ -46,7 +48,7 @@ public final class RedisOtpService {
             return SendResult.invalidSession();
         }
 
-        try (Jedis jedis = RedisClients.getPool().getResource()) {
+        try (Jedis jedis = RedisClients.getPool(logger).getResource()) {
             String sendCountRaw = jedis.get(sendCountKey(session.sessionId));
             int sendCount = sendCountRaw == null || sendCountRaw.isBlank() ? 0 : Integer.parseInt(sendCountRaw);
             if (sendCount >= MAX_OTP_SENDS) {
@@ -82,24 +84,24 @@ public final class RedisOtpService {
         }
     }
 
-    public static void clearOtp(String sessionId) {
+    public static void clearOtp(String sessionId, Logger logger) {
         if (sessionId == null || sessionId.isBlank()) return;
-        try (Jedis jedis = RedisClients.getPool().getResource()) {
+        try (Jedis jedis = RedisClients.getPool(logger).getResource()) {
             jedis.del(otpKey(sessionId));
             jedis.del(attemptsKey(sessionId));
         }
     }
 
-    public static VerifyResult verifyOtp(String sessionId, String otp) {
-        RegistrationSession session = RedisSessionService.getSession(sessionId);
+    public static VerifyResult verifyOtp(String sessionId, String otp, Logger logger) {
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
         if (session == null || !session.isMobileBound()) {
             return VerifyResult.invalidSession();
         }
         if (otp == null || !otp.matches("\\d{6}")) {
-            return VerifyResult.invalidOtp(remainingAttempts(sessionId));
+            return VerifyResult.invalidOtp(remainingAttempts(sessionId, logger));
         }
 
-        try (Jedis jedis = RedisClients.getPool().getResource()) {
+        try (Jedis jedis = RedisClients.getPool(logger).getResource()) {
             String storedHash = jedis.get(otpKey(sessionId));
             if (storedHash == null || storedHash.isBlank()) {
                 return VerifyResult.expired();
@@ -109,7 +111,7 @@ public final class RedisOtpService {
             if (OtpHashUtil.matches(sessionId, session.phoneE164, otp, storedHash, secret)) {
                 jedis.del(otpKey(sessionId));
                 jedis.del(attemptsKey(sessionId));
-                RedisSessionService.markOtpVerified(sessionId);
+                RedisSessionService.markOtpVerified(sessionId, logger);
                 return VerifyResult.success();
             }
 
@@ -126,8 +128,8 @@ public final class RedisOtpService {
         }
     }
 
-    private static int remainingAttempts(String sessionId) {
-        try (Jedis jedis = RedisClients.getPool().getResource()) {
+    private static int remainingAttempts(String sessionId, Logger logger) {
+        try (Jedis jedis = RedisClients.getPool(logger).getResource()) {
             String val = jedis.get(attemptsKey(sessionId));
             if (val == null || val.isBlank()) return MAX_VERIFY_ATTEMPTS;
             int used = Integer.parseInt(val);
