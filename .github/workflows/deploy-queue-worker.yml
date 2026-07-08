@@ -86,7 +86,7 @@ jobs:
           client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
           tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
           client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
-          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRITION }}
+          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
 
       - name: Set AKS Context
         uses: azure/aks-set-context@v4
