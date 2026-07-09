@@ -8,10 +8,6 @@ import com.opal.deltav.otp.RedisOtpService;
 import com.opal.deltav.otp.RedisSessionService;
 import com.opal.deltav.otp.RegistrationSession;
 import com.opal.deltav.otp.SmsOtpSender;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkToken;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
-import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.util.PhoneUtil;
 
 import java.util.HashMap;
@@ -38,62 +34,47 @@ public class OtpFunction {
             return corsResponse(request, HttpStatus.NO_CONTENT, null);
         }
 
-        // Validate session from cookie
-        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
-        if (sessionId == null || sessionId.isBlank()) {
-            logger.warning("OTP send rejected: missing session cookie");
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
-        }
-
-        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
-        logger.info("Session retrieved: " + session);
-        if (session == null) {
-            logger.warning("OTP send rejected: invalid session " + sessionId);
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
+        JsonObject json = parseJson(request, logger);
+        if (json == null) {
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
         try {
-            boolean enforceCooldown;
-
-            // If session already has mobile bound, this is a resend
-            if (session.isMobileBound()) {
-                if (session.isOtpVerified()) {
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
-                }
-                enforceCooldown = true;
-            } else {
-                // First time - fetch mobile from Azure Table using token
-                String token = SessionManager.getInstance().getTokenForSession(sessionId, logger);
-                if (token == null || token.isBlank()) {
-                    logger.warning("OTP send rejected: no token associated with session " + sessionId);
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Session token not found"));
-                }
-
-                // Validate token and get token data with decrypted mobile number
-                ScheduleLinkTokenProvider provider = ScheduleLinkTokenProviderFactory.getProvider();
-                ScheduleLinkTokenProvider.ValidationResult validationResult = provider.validateToken(token, logger);
-                if (!validationResult.valid) {
-                    logger.warning("OTP send rejected: token validation failed - " + validationResult.error);
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Token validation failed"));
-                }
-
-                ScheduleLinkToken tokenData = validationResult.token;
-                String mobile = tokenData.getMobileNumber();
-                if (mobile == null || mobile.isBlank()) {
-                    logger.warning("OTP send rejected: no mobile number in token data for session " + sessionId);
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Mobile number not found"));
-                }
-
-                String phoneE164 = PhoneUtil.toE164(mobile);
-                if (phoneE164 == null) {
-                    logger.warning("OTP send rejected: invalid mobile format in token - " + mobile);
-                    return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
-                }
-                session = RedisSessionService.bindMobile(sessionId, session.practiceId, phoneE164, logger);
-                enforceCooldown = false;
+            // Check if this is a resend (session_id provided)
+            String sessionId = getString(json, "session_id");
+            if (sessionId != null && !sessionId.isBlank()) {
+                return handleResend(request, sessionId, logger);
             }
 
-            return deliverOtp(request, logger, session, enforceCooldown);
+            // First time - get mobile and practice_id from request
+            String mobile = getString(json, "mobile");
+            String practiceId = getString(json, "practice_id");
+
+            if (mobile == null || mobile.isBlank()) {
+                logger.warning("OTP send rejected: missing mobile number");
+                return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Mobile number is required"));
+            }
+
+            if (practiceId == null || practiceId.isBlank()) {
+                // Try to get from cookie
+                practiceId = extractPracticeIdFromCookie(request.getHeaders(), logger);
+            }
+
+            if (practiceId == null || practiceId.isBlank()) {
+                practiceId = "default"; // Use default if not provided
+            }
+
+            String phoneE164 = PhoneUtil.toE164(mobile);
+            if (phoneE164 == null) {
+                logger.warning("OTP send rejected: invalid mobile format - " + mobile);
+                return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "invalid_mobile"));
+            }
+
+            // Create new session and bind mobile
+            sessionId = RedisSessionService.createSession(practiceId, logger);
+            RegistrationSession session = RedisSessionService.bindMobile(sessionId, practiceId, phoneE164, logger);
+
+            return deliverOtp(request, logger, session, false);
         } catch (IllegalStateException e) {
             logger.severe("OTP send configuration error: " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "Server configuration error"));
@@ -101,6 +82,25 @@ public class OtpFunction {
             logger.severe("OTP send failed: " + e.getClass().getName() + " - " + e.getMessage());
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "Failed to send OTP"));
         }
+    }
+
+    private HttpResponseMessage handleResend(HttpRequestMessage<Optional<String>> request, String sessionId, Logger logger) {
+        RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
+        if (session == null) {
+            logger.warning("OTP resend rejected: invalid session " + sessionId);
+            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid or expired session"));
+        }
+
+        if (!session.isMobileBound()) {
+            logger.warning("OTP resend rejected: session not bound to mobile " + sessionId);
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Session not initialized"));
+        }
+
+        if (session.isOtpVerified()) {
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "already_verified"));
+        }
+
+        return deliverOtp(request, logger, session, true);
     }
 
     @FunctionName("otpVerify")
@@ -118,11 +118,16 @@ public class OtpFunction {
             return corsResponse(request, HttpStatus.NO_CONTENT, null);
         }
 
-        // Validate session from cookie
-        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
+        JsonObject json = parseJson(request, logger);
+        if (json == null) {
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
+        }
+
+        // Get session_id from request body
+        String sessionId = getString(json, "session_id");
         if (sessionId == null || sessionId.isBlank()) {
-            logger.warning("OTP verify rejected: missing session cookie");
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Session required"));
+            logger.warning("OTP verify rejected: missing session_id");
+            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "session_id is required"));
         }
 
         RegistrationSession session = RedisSessionService.getSession(sessionId, logger);
@@ -140,11 +145,6 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.OK, Map.of(
                     "verified", true,
                     "session_state", RegistrationSession.STATE_OTP_VERIFIED));
-        }
-
-        JsonObject json = parseJson(request, logger);
-        if (json == null) {
-            return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
         String otp = getString(json, "otp");
@@ -265,7 +265,7 @@ public class OtpFunction {
                 .header("Access-Control-Max-Age", "3600");
     }
 
-    private static String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
+    private static String extractPracticeIdFromCookie(Map<String, String> headers, Logger logger) {
         String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
         if (cookieHeader == null || cookieHeader.isBlank()) {
             return null;
@@ -273,10 +273,17 @@ public class OtpFunction {
 
         for (String cookie : cookieHeader.split(";")) {
             String trimmed = cookie.trim();
-            if (trimmed.startsWith("DELTAV_SESSION=")) {
-                String sessionId = trimmed.substring("DELTAV_SESSION=".length()).trim();
-                logger.info("Found session ID in cookie");
-                return sessionId;
+            if (trimmed.startsWith("DELTAV_CONTEXT=")) {
+                String context = trimmed.substring("DELTAV_CONTEXT=".length()).trim();
+                // Context format: clientId:practiceId
+                if (context.contains(":")) {
+                    String[] parts = context.split(":", 2);
+                    if (parts.length == 2) {
+                        String practiceId = parts[1].trim();
+                        logger.info("Found practice ID in context cookie: " + practiceId);
+                        return practiceId;
+                    }
+                }
             }
         }
 

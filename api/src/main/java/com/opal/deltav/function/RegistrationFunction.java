@@ -7,10 +7,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.opal.deltav.config.PracticeConfig;
 import com.opal.deltav.model.QueueMessage;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkToken;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
-import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
 import com.opal.deltav.util.TokenUtil;
@@ -55,57 +51,26 @@ public class RegistrationFunction {
                     Map.of("error", "Invalid JSON"));
         }
 
+        // Validate CSRF token (uses the same secret as StaticFileFunction)
         String secret = System.getenv("REGISTRATION_TOKEN_SECRET");
         if (secret == null || secret.isBlank()) {
             logger.severe("REGISTRATION_TOKEN_SECRET is not configured");
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
                     Map.of("error", "Server configuration error"));
         }
+
         String headerToken = getHeaderIgnoreCase(request.getHeaders(), "X-Registration-Token");
-        String bodyToken = json.has("registration_token") && !json.get("registration_token").isJsonNull()
-                ? json.get("registration_token").getAsString() : null;
-        String token = (headerToken != null && !headerToken.isBlank()) ? headerToken : bodyToken;
-        TokenUtil.ValidationResult tokenResult = TokenUtil.validate(token, secret);
+        String bodyToken = getStr(json, "registration_token");
+        String csrfToken = (headerToken != null && !headerToken.isBlank()) ? headerToken : bodyToken;
+
+        TokenUtil.ValidationResult tokenResult = TokenUtil.validate(csrfToken, secret);
         if (!tokenResult.valid) {
             logger.warning("Registration rejected due to token error: " + tokenResult.error);
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
-                    Map.of("error", tokenResult.error));
+            return jsonResponse(request, HttpStatus.FORBIDDEN,
+                    Map.of("error", "Invalid or expired form. Please refresh the page and try again."));
         }
 
-        // Validate session from cookie
-        String sessionId = extractSessionIdFromCookie(request.getHeaders(), logger);
-        if (sessionId == null || sessionId.isBlank()) {
-            logger.warning("Registration rejected: missing session cookie");
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
-                    Map.of("error", "Session required"));
-        }
-
-        if (!SessionManager.getInstance().isValidSession(sessionId, logger)) {
-            logger.warning("Registration rejected: invalid or expired session");
-            return jsonResponse(request, HttpStatus.UNAUTHORIZED,
-                    Map.of("error", "Invalid or expired session"));
-        }
-
-        // Get schedule link token from session to retrieve client/practice data
-        String scheduleLinkToken = SessionManager.getInstance().getTokenForSession(sessionId, logger);
-        if (scheduleLinkToken == null || scheduleLinkToken.isBlank()) {
-            logger.warning("Registration rejected: no schedule link token found for session");
-            return jsonResponse(request, HttpStatus.BAD_REQUEST,
-                    Map.of("error", "Invalid session - missing token data"));
-        }
-
-        // Validate and get token data from table storage
-        ScheduleLinkTokenProvider tokenProvider = ScheduleLinkTokenProviderFactory.getProvider();
-        ScheduleLinkTokenProvider.ValidationResult validationResult = tokenProvider.validateToken(scheduleLinkToken, logger);
-        if (!validationResult.valid) {
-            logger.warning("Registration rejected: schedule link token invalid - " + validationResult.error);
-            return jsonResponse(request, HttpStatus.BAD_REQUEST,
-                    Map.of("error", "Invalid or expired link"));
-        }
-
-        ScheduleLinkToken tokenData = validationResult.token;
-
-        // Validate request
+        // Validate request fields
         List<String> errors = validate(json);
         if (!errors.isEmpty()) {
             logger.warning("Validation failed: " + String.join(", ", errors));
@@ -114,20 +79,34 @@ public class RegistrationFunction {
         }
 
         try {
-            // Get data from token (Azure Table)
-            String clientId = tokenData.getClientId() != null ? String.valueOf(tokenData.getClientId()) : "";
-            Long practiceId = tokenData.getPracticeId();
-            Long patientKey = tokenData.getPatientKey();
+            // Get practice ID from request (optional - for redirect URL)
+            String practiceIdStr = getStr(json, "practice");
+            Long practiceId = null;
+            if (practiceIdStr != null && !practiceIdStr.isBlank()) {
+                try {
+                    practiceId = Long.parseLong(practiceIdStr);
+                } catch (NumberFormatException e) {
+                    // Ignore invalid practice ID
+                }
+            }
+
+            // Get patient info from request
+            String patientFirstName = getStr(json, "patient_first_name");
+            String patientLastName = getStr(json, "patient_last_name");
+            String dateOfBirth = getStr(json, "date_of_birth");
+            String mobileNumber = getStr(json, "mobile_number");
 
             // Get preferred slots and comments from request
             List<String> preferredSlots = getStringList(json, "preferred_slots");
             String comments = getStr(json, "comments");
 
-            // Build queue message with only required fields
+            // Build queue message with patient info
             QueueMessage queueMessage = QueueMessage.builder()
-                    .patientKey(patientKey)
-                    .patientId(patientKey != null ? String.valueOf(patientKey) : null)
                     .practiceId(practiceId)
+                    .patientFirstName(patientFirstName)
+                    .patientLastName(patientLastName)
+                    .dateOfBirth(dateOfBirth)
+                    .mobileNumber(mobileNumber)
                     .preferredSlots(preferredSlots)
                     .comments(comments)
                     .build();
@@ -135,20 +114,13 @@ public class RegistrationFunction {
             // Publish to queue
             MessagePublisher publisher = MessagePublisherFactory.getPublisher();
             logger.info("Publishing to queue: " + publisher.getType());
+            String clientId = practiceId != null ? String.valueOf(practiceId) : "";
             publisher.publish(queueMessage, clientId, logger);
 
-            // Mark token as used after successful publish
-            String clientIp = getClientIp(request);
-            tokenProvider.markAsUsed(scheduleLinkToken, clientIp, logger);
-
-            // Invalidate session after successful registration
-            SessionManager.getInstance().invalidateSession(sessionId, logger);
-
-            String redirectUrl = PracticeConfig.getRedirectUrl(String.valueOf(practiceId));
+            String redirectUrl = practiceId != null ? PracticeConfig.getRedirectUrl(String.valueOf(practiceId)) : null;
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
 
-            // Return response with cookie cleared
-            return jsonResponseWithClearCookie(request, HttpStatus.CREATED,
+            return jsonResponse(request, HttpStatus.CREATED,
                     Map.of("success", true, "redirect_url", Objects.toString(redirectUrl, "")));
 
         } catch (Exception e) {
@@ -160,6 +132,26 @@ public class RegistrationFunction {
 
     private List<String> validate(JsonObject json) {
         List<String> errors = new ArrayList<>();
+
+        String firstName = getStr(json, "patient_first_name");
+        if (firstName == null || firstName.isBlank()) {
+            errors.add("Patient first name is required");
+        }
+
+        String lastName = getStr(json, "patient_last_name");
+        if (lastName == null || lastName.isBlank()) {
+            errors.add("Patient last name is required");
+        }
+
+        String dob = getStr(json, "date_of_birth");
+        if (dob == null || dob.isBlank()) {
+            errors.add("Date of birth is required");
+        }
+
+        String mobile = getStr(json, "mobile_number");
+        if (mobile == null || mobile.isBlank()) {
+            errors.add("Mobile number is required");
+        }
 
         if (!getBool(json, "agree_privacy")) {
             errors.add("Must agree to privacy policy");
@@ -202,15 +194,6 @@ public class RegistrationFunction {
         return builder.build();
     }
 
-    private HttpResponseMessage jsonResponseWithClearCookie(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
-        HttpResponseMessage.Builder builder = request.createResponseBuilder(status)
-                .body(gson.toJson(body))
-                .header("Content-Type", "application/json")
-                .header("Set-Cookie", "DELTAV_SESSION=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict");
-        addCorsHeaders(builder, request);
-        return builder.build();
-    }
-
     private HttpResponseMessage corsResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
         if (body != null) {
@@ -227,7 +210,7 @@ public class RegistrationFunction {
         builder.header("Access-Control-Allow-Origin", origin)
                .header("Vary", "Origin")
                .header("Access-Control-Allow-Methods", "POST, OPTIONS")
-               .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Registration-Token")
+               .header("Access-Control-Allow-Headers", "Content-Type, X-Registration-Token")
                .header("Access-Control-Max-Age", "3600");
     }
 
@@ -237,45 +220,5 @@ public class RegistrationFunction {
             if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
         }
         return null;
-    }
-
-    private String extractSessionIdFromCookie(Map<String, String> headers, Logger logger) {
-        String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
-        if (cookieHeader == null || cookieHeader.isBlank()) {
-            return null;
-        }
-
-        for (String cookie : cookieHeader.split(";")) {
-            String trimmed = cookie.trim();
-            if (trimmed.startsWith("DELTAV_SESSION=")) {
-                String sessionId = trimmed.substring("DELTAV_SESSION=".length()).trim();
-                logger.info("Found session ID in cookie");
-                return sessionId;
-            }
-        }
-
-        return null;
-    }
-
-    private String getClientIp(HttpRequestMessage<?> request) {
-        Map<String, String> headers = request.getHeaders();
-
-        String xff = getHeaderIgnoreCase(headers, "X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            String[] ips = xff.split(",");
-            return ips[0].trim();
-        }
-
-        String realIp = getHeaderIgnoreCase(headers, "X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
-        }
-
-        String clientIp = getHeaderIgnoreCase(headers, "CLIENT-IP");
-        if (clientIp != null && !clientIp.isBlank()) {
-            return clientIp.trim();
-        }
-
-        return "unknown";
     }
 }

@@ -2,9 +2,6 @@ package com.opal.deltav.function;
 
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProvider;
-import com.opal.deltav.schedulelinktoken.ScheduleLinkTokenProviderFactory;
-import com.opal.deltav.session.SessionManager;
 import com.opal.deltav.util.TokenUtil;
 
 import java.io.ByteArrayOutputStream;
@@ -149,34 +146,32 @@ public class StaticFileFunction {
     }
 
     /**
-     * Handle token-based request (e.g., /<token>).
-     * Validates token against table storage and serves index.html.
+     * Handle URL request with clientId:practiceId format (e.g., /123:456).
+     * Extracts clientId and practiceId, stores them in cookies, and serves index.html.
      */
-    private HttpResponseMessage handleTokenRequest(HttpRequestMessage<Optional<String>> request, String token, Logger logger) {
-        logger.info("Token request received: " + token);
+    private HttpResponseMessage handleTokenRequest(HttpRequestMessage<Optional<String>> request, String pathSegment, Logger logger) {
+        logger.info("Path segment received: " + pathSegment);
 
-        // Validate token against table storage
-        ScheduleLinkTokenProvider provider = ScheduleLinkTokenProviderFactory.getProvider();
-        ScheduleLinkTokenProvider.ValidationResult validationResult = provider.validateToken(token, logger);
+        // Parse clientId:practiceId format
+        String clientId = null;
+        String practiceId = null;
 
-        if (!validationResult.valid) {
-            logger.warning("Token validation failed for '" + token + "': " + validationResult.error);
-            return addCors(request, request.createResponseBuilder(HttpStatus.UNAUTHORIZED)
+        if (pathSegment.contains(":")) {
+            String[] parts = pathSegment.split(":", 2);
+            if (parts.length == 2) {
+                clientId = parts[0].trim();
+                practiceId = parts[1].trim();
+            }
+        }
+
+        if (clientId == null || clientId.isEmpty() || practiceId == null || practiceId.isEmpty()) {
+            logger.warning("Invalid URL format: " + pathSegment + " (expected clientId:practiceId)");
+            return addCors(request, request.createResponseBuilder(HttpStatus.BAD_REQUEST)
                     .header("Content-Type", "text/html; charset=utf-8")
-                    .body("<html><body><h1>Invalid or Expired Link</h1><p>This link is no longer valid. Please request a new link.</p></body></html>")).build();
+                    .body("<html><body><h1>Invalid Link</h1><p>The link format is invalid. Please use the link provided to you.</p></body></html>")).build();
         }
 
-        String practiceId = String.valueOf(validationResult.token.getPracticeId());
-        logger.info("Token validated successfully: " + token + ", practiceId=" + practiceId);
-
-        // Create session with practice ID and token
-        String sessionId = SessionManager.getInstance().createSession(practiceId, token, logger);
-
-        long sessionTtlSeconds = 900; // 30 minutes default
-        String sessionTtlEnv = System.getenv("SESSION_TTL_SECONDS");
-        if (sessionTtlEnv != null && !sessionTtlEnv.isBlank()) {
-            try { sessionTtlSeconds = Math.max(300, Long.parseLong(sessionTtlEnv)); } catch (Exception ignore) {}
-        }
+        logger.info("Parsed clientId=" + clientId + ", practiceId=" + practiceId);
 
         // Serve index.html with registration token
         try {
@@ -204,28 +199,19 @@ public class StaticFileFunction {
 
             String html = new String(data, StandardCharsets.UTF_8);
 
-            // Replace practice name placeholder
-            String practiceName = validationResult.token.getPracticeName();
-            if (practiceName != null && !practiceName.isBlank()) {
-                html = html.replace("${practice_name}", practiceName);
-            }
+            // Replace placeholders with empty values (UI will handle display)
+            html = html.replace("${practice_name}", "");
+            html = html.replace("${patient_first_name}", "");
+            html = html.replace("${practice_logo_url}", "logo.png");
+            html = html.replace("${phone_number}", "");
 
-            // Replace patient first name placeholder
-            String patientFirstName = validationResult.token.getPatientFirstName();
-            html = html.replace("${patient_first_name}", patientFirstName != null ? patientFirstName : "");
-
-            // Replace practice logo URL placeholder
-            String logoBlobPath = validationResult.token.getLogoBlobPath();
-            String logoUrl = (logoBlobPath != null && !logoBlobPath.isBlank())
-                    ? "/api/logo/" + logoBlobPath
-                    : "logo.png"; // fallback to default logo
-            html = html.replace("${practice_logo_url}", logoUrl);
-
-            // Inject full on-file phone number into hidden field (masking/formatting is done client-side)
-            String mobileNumber = validationResult.token.getMobileNumber();
-            html = html.replace("${phone_number}", mobileNumber == null ? "" : mobileNumber);
-
-            String inject = "<script>window.DELTAV_TOKEN='" + registrationToken + "';window.DELTAV_TOKEN_EXP=" + exp + ";</script>";
+            // Inject registration token and context (clientId:practiceId) for JavaScript
+            String context = clientId + ":" + practiceId;
+            String inject = "<script>" +
+                    "window.DELTAV_TOKEN='" + registrationToken + "';" +
+                    "window.DELTAV_TOKEN_EXP=" + exp + ";" +
+                    "window.DELTAV_CONTEXT='" + context + "';" +
+                    "</script>";
             if (html.contains("</head>")) {
                 html = html.replace("</head>", inject + "</head>");
             } else if (html.contains("</body>")) {
@@ -234,18 +220,25 @@ public class StaticFileFunction {
                 html = html + inject;
             }
 
-            // Build session cookie
-            String cookie = String.format("DELTAV_SESSION=%s; Max-Age=%d; Path=/; HttpOnly; SameSite=Strict",
-                    sessionId, sessionTtlSeconds);
+            // Cookie TTL
+            long cookieTtlSeconds = 1800; // 30 minutes default
+            String cookieTtlEnv = System.getenv("COOKIE_TTL_SECONDS");
+            if (cookieTtlEnv != null && !cookieTtlEnv.isBlank()) {
+                try { cookieTtlSeconds = Math.max(300, Long.parseLong(cookieTtlEnv)); } catch (Exception ignore) {}
+            }
+
+            // Build single cookie with clientId:practiceId
+            String contextCookie = String.format("DELTAV_CONTEXT=%s; Max-Age=%d; Path=/; SameSite=Strict",
+                    context, cookieTtlSeconds);
 
             return addCors(request, request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", "text/html; charset=utf-8")
                     .header("Cache-Control", "no-store, must-revalidate")
-                    .header("Set-Cookie", cookie)
+                    .header("Set-Cookie", contextCookie)
                     .body(html.getBytes(StandardCharsets.UTF_8))).build();
 
         } catch (IOException e) {
-            logger.severe("Error serving index.html for token request: " + e.getMessage());
+            logger.severe("Error serving index.html: " + e.getMessage());
             return addCors(request, request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Internal server error")).build();
         }
