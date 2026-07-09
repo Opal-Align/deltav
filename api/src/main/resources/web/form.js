@@ -8,12 +8,12 @@
   var practiceId = new URLSearchParams(window.location.search).get("practice") || "";
 
   // ── Branding & patient — populated from API ───────────────────────────────
-  var practiceName    = `${practice_name}`;  // API variable: practice_name
-  var practiceLogoUrl = `${practice_logo_url}`;  // API variable: practice_logo_url
-  var patientFirstName = `${patient_first_name}`; // API variable: patient_first_name
+  var practiceName    = "${practice_name}";  // API variable: practice_name
+  var practiceLogoUrl = "${practice_logo_url}";  // API variable: practice_logo_url
+  var patientFirstName = "${patient_first_name}"; // API variable: patient_first_name
 
   function applyBranding() {
-    if (practiceName) {
+    if (practiceName) { 
       document.title = practiceName + " — Book an Appointment";
       var logo = document.getElementById("practice-logo");
       if (logo) logo.setAttribute("alt", practiceName);
