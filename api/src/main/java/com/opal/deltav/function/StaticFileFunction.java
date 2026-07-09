@@ -210,6 +210,10 @@ public class StaticFileFunction {
                 html = html.replace("${practice_name}", practiceName);
             }
 
+            // Replace patient first name placeholder
+            String patientFirstName = validationResult.token.getPatientFirstName();
+            html = html.replace("${patient_first_name}", patientFirstName != null ? patientFirstName : "");
+
             // Inject full on-file phone number into hidden field (masking/formatting is done client-side)
             String mobileNumber = validationResult.token.getMobileNumber();
             html = html.replace("${phone_number}", mobileNumber == null ? "" : mobileNumber);
