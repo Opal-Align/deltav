@@ -214,6 +214,13 @@ public class StaticFileFunction {
             String patientFirstName = validationResult.token.getPatientFirstName();
             html = html.replace("${patient_first_name}", patientFirstName != null ? patientFirstName : "");
 
+            // Replace practice logo URL placeholder
+            String logoBlobPath = validationResult.token.getLogoBlobPath();
+            String logoUrl = (logoBlobPath != null && !logoBlobPath.isBlank())
+                    ? "/api/logo/" + logoBlobPath
+                    : "logo.png"; // fallback to default logo
+            html = html.replace("${practice_logo_url}", logoUrl);
+
             // Inject full on-file phone number into hidden field (masking/formatting is done client-side)
             String mobileNumber = validationResult.token.getMobileNumber();
             html = html.replace("${phone_number}", mobileNumber == null ? "" : mobileNumber);
