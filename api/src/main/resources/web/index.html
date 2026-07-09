@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${practice_name} — Book an Appointment</title>
+  <title>Book an Appointment</title>
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -27,10 +27,10 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <aside class="brand-panel">
     <div class="brand-content">
       <div class="brand-logo">
-        <img id="practice-logo" src="${practice_logo_url}" alt="" class="brand-logo-img" />
+        <img id="practice-logo" src="logo.png" alt="" class="brand-logo-img" />
       </div>
       <h2 class="brand-headline">Your care journey<br/>starts here.</h2>
-      <p class="brand-sub">Pick your preferred times and we'll reach out to confirm your appointment.</p>
+      <p class="brand-sub">Complete your registration in minutes and reserve your preferred appointment slots.</p>
       <ul class="brand-perks">
         <li>
           <span class="perk-check">
@@ -57,13 +57,89 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <main class="form-panel">
     <div class="form-card">
       <header class="intro">
-        <h1 id="welcome-heading">Welcome, ${patient_first_name}!</h1>
-        <p class="intro-text">Pick up to 3 preferred appointment times and our team will be in touch to confirm. Your information is kept private and secure.</p>
+        <h1 id="welcome-heading">Welcome!</h1>
+        <p class="intro-text">Please complete this registration form. Your privacy is important — all information is securely protected.</p>
       </header>
 
       <form id="registration-form" class="form" novalidate>
         <input type="hidden" name="next" id="next-url" value="" />
         <input type="hidden" id="onfile-phone" value="${phone_number}" />
+
+        <section class="section" id="registrant-section">
+          <h2 class="section-title">Who is this registration for?</h2>
+          <div class="radio-group" role="group" aria-label="Who is this registration for?">
+            <label class="radio-label">
+              <input type="radio" name="registrant" value="myself" checked />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Myself</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="registrant" value="another" />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Another patient</span>
+            </label>
+          </div>
+
+          <div id="relationship-fields" class="conditional-fields" hidden>
+            <label class="field-label" for="relationship">Relationship to patient</label>
+            <select id="relationship" name="relationship" class="input select" aria-describedby="err-relationship">
+              <option value="">Select relationship</option>
+              <option value="parent-guardian">Parent / Guardian</option>
+              <option value="spouse-partner">Spouse / Partner</option>
+              <option value="child">Child</option>
+              <option value="caregiver">Caregiver</option>
+              <option value="legal-representative">Legal Representative</option>
+              <option value="other">Other</option>
+            </select>
+            <span class="error-msg" id="err-relationship" role="alert"></span>
+            <div id="relationship-other-wrap" class="other-wrap" hidden>
+              <label class="field-label" for="relationship-other">Please specify</label>
+              <input type="text" id="relationship-other" name="relationship_other" class="input" placeholder="Other relationship" />
+              <span class="error-msg" id="err-relationship-other" role="alert"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="patient-type-section">
+          <h2 class="section-title">Patient Status</h2>
+          <div class="radio-group" role="group" aria-label="Are you a new or existing patient?">
+            <label class="radio-label">
+              <input type="radio" name="patient_type" value="new" checked />
+              <span class="radio-custom"></span>
+              <span class="radio-text">New patient</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="patient_type" value="existing" />
+              <span class="radio-custom"></span>
+              <span class="radio-text">Existing patient</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Patient Information</h2>
+          <div class="row">
+            <div class="field">
+              <label class="field-label" for="first-name">First Name</label>
+              <input type="text" id="first-name" name="first_name" class="input" required placeholder="First name" />
+              <span class="error-msg" id="err-first-name" role="alert"></span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="middle-name">Middle Name <span class="optional">(optional)</span></label>
+              <input type="text" id="middle-name" name="middle_name" class="input" placeholder="Middle name" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="last-name">Last Name</label>
+            <input type="text" id="last-name" name="last_name" class="input" required placeholder="Last name" />
+            <span class="error-msg" id="err-last-name" role="alert"></span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="dob">Date of Birth</label>
+            <input type="text" id="dob" name="dob" class="input" required placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" />
+            <span class="error-msg" id="err-dob" role="alert"></span>
+          </div>
+        </section>
 
         <section class="section">
           <h2 class="section-title">
@@ -102,6 +178,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <section class="section section-consent">
           <h2 class="section-title">Consent / Acknowledgement</h2>
           <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="confirm-accurate" name="confirm_accurate" required />
+              <span class="checkbox-custom">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="checkbox-text">I confirm the information is accurate</span>
+            </label>
+            <span class="error-msg" id="err-confirm-accurate" role="alert"></span>
             <label class="checkbox-label">
               <input type="checkbox" id="agree-privacy" name="agree_privacy" required />
               <span class="checkbox-custom">
