@@ -249,6 +249,9 @@
   var pendingPayload = null;
   var sessionId = null;
   var otpTimerId = null;
+  var successCloseTimerId = null;
+  var successCloseIntervalId = null;
+  var SUCCESS_AUTO_CLOSE_SECONDS = 5;
   var resendLocked = false;
 
   var otpModal = document.getElementById("otp-modal");
@@ -259,6 +262,10 @@
   var otpVerifyBtn = document.getElementById("otp-verify-btn");
   var otpResendBtn = document.getElementById("otp-resend-btn");
   var otpCancelBtn = document.getElementById("otp-cancel-btn");
+  var otpCancelProgress = document.getElementById("otp-cancel-progress");
+  var otpCancelLabel = document.getElementById("otp-cancel-label");
+  var otpCloseTimer = document.getElementById("otp-close-timer");
+  var otpCloseSeconds = document.getElementById("otp-close-seconds");
   var otpStepSend = document.getElementById("otp-step-send");
   var otpStepVerify = document.getElementById("otp-step-verify");
   var otpStepSuccess = document.getElementById("otp-step-success");
@@ -325,6 +332,97 @@
     if (otpTimerWrap) otpTimerWrap.hidden = true;
   }
 
+  function stopSuccessCloseInterval() {
+    if (successCloseIntervalId) {
+      clearInterval(successCloseIntervalId);
+      successCloseIntervalId = null;
+    }
+  }
+
+  function stopSuccessCloseTimer() {
+    if (successCloseTimerId) {
+      clearTimeout(successCloseTimerId);
+      successCloseTimerId = null;
+    }
+    stopSuccessCloseInterval();
+  }
+
+  var registrationFinished = false;
+
+  function finishRegistrationSession() {
+    if (registrationFinished) return;
+    registrationFinished = true;
+    stopSuccessCloseTimer();
+    if (otpModal) {
+      otpModal.hidden = true;
+      otpModal.setAttribute("aria-hidden", "true");
+    }
+    var page = document.querySelector(".page");
+    if (page) page.hidden = true;
+    var done = document.getElementById("registration-done");
+    if (done) done.hidden = false;
+    document.title = "Registration complete";
+  }
+
+  function closeRegistrationTab() {
+    if (registrationFinished) return;
+    stopSuccessCloseTimer();
+    window.close();
+    // Browsers block window.close() unless this tab was opened by script (e.g. SMS links).
+    setTimeout(finishRegistrationSession, 250);
+  }
+
+  function resetCloseCountdownUI() {
+    if (!otpCancelBtn) return;
+    otpCancelBtn.classList.remove("is-countdown");
+    otpCancelBtn.style.removeProperty("--close-countdown");
+    if (otpCancelProgress) {
+      otpCancelProgress.hidden = true;
+      otpCancelProgress.style.animation = "none";
+      otpCancelProgress.style.width = "0";
+      otpCancelProgress.onanimationend = null;
+    }
+    if (otpCancelLabel) otpCancelLabel.textContent = "Cancel";
+    if (otpCloseTimer) otpCloseTimer.hidden = true;
+    if (otpCloseSeconds) otpCloseSeconds.textContent = String(SUCCESS_AUTO_CLOSE_SECONDS);
+  }
+
+  function startCloseCountdownUI() {
+    if (!otpCancelBtn) return;
+    var remaining = SUCCESS_AUTO_CLOSE_SECONDS;
+
+    otpCancelBtn.hidden = false;
+    otpCancelBtn.classList.add("is-countdown");
+    otpCancelBtn.style.setProperty("--close-countdown", SUCCESS_AUTO_CLOSE_SECONDS + "s");
+    if (otpCancelLabel) otpCancelLabel.textContent = "Close";
+    if (otpCloseTimer) otpCloseTimer.hidden = false;
+    if (otpCloseSeconds) otpCloseSeconds.textContent = String(remaining);
+
+    if (otpCancelProgress) {
+      otpCancelProgress.hidden = false;
+      otpCancelProgress.style.animation = "none";
+      void otpCancelProgress.offsetWidth;
+      otpCancelProgress.style.animation = "";
+      otpCancelProgress.onanimationend = function () {
+        closeRegistrationTab();
+      };
+    }
+
+    stopSuccessCloseInterval();
+    successCloseIntervalId = setInterval(function () {
+      remaining -= 1;
+      if (otpCloseSeconds) otpCloseSeconds.textContent = String(Math.max(0, remaining));
+      if (remaining <= 0) stopSuccessCloseInterval();
+    }, 1000);
+
+    scheduleSuccessAutoClose();
+  }
+
+  function scheduleSuccessAutoClose() {
+    stopSuccessCloseTimer();
+    successCloseTimerId = setTimeout(closeRegistrationTab, SUCCESS_AUTO_CLOSE_SECONDS * 1000);
+  }
+
   function setResendState(enabled, secondsRemaining) {
     if (!otpResendBtn) return;
     var canEnable = enabled && !resendLocked;
@@ -371,7 +469,11 @@
     if (otpStepSend) otpStepSend.hidden = false;
     if (otpStepVerify) otpStepVerify.hidden = true;
     if (otpStepSuccess) otpStepSuccess.hidden = true;
-    if (otpCancelBtn) otpCancelBtn.hidden = false;
+    if (otpCancelBtn) {
+      otpCancelBtn.hidden = false;
+      otpCancelBtn.classList.remove("is-countdown");
+    }
+    resetCloseCountdownUI();
   }
 
   function openOtpModal() {
@@ -404,15 +506,16 @@
     if (otpStepSend) otpStepSend.hidden = true;
     if (otpStepVerify) otpStepVerify.hidden = true;
     if (otpStepSuccess) otpStepSuccess.hidden = false;
-    if (otpCancelBtn) otpCancelBtn.hidden = true;
     if (otpModal) {
       otpModal.hidden = false;
       otpModal.setAttribute("aria-hidden", "false");
     }
+    startCloseCountdownUI();
   }
 
   function closeOtpModal() {
     stopOtpTimer();
+    stopSuccessCloseTimer();
     resetOtpModalSteps();
     if (otpModal) {
       otpModal.hidden = true;
@@ -621,10 +724,18 @@
       });
   }
 
+  function handleOtpCancelOrClose() {
+    if (otpStepSuccess && !otpStepSuccess.hidden) {
+      closeRegistrationTab();
+      return;
+    }
+    closeOtpModal();
+  }
+
   if (otpSendBtn) otpSendBtn.addEventListener("click", sendOtp);
   if (otpResendBtn) otpResendBtn.addEventListener("click", sendOtp);
   if (otpVerifyBtn) otpVerifyBtn.addEventListener("click", verifyOtp);
-  if (otpCancelBtn) otpCancelBtn.addEventListener("click", closeOtpModal);
+  if (otpCancelBtn) otpCancelBtn.addEventListener("click", handleOtpCancelOrClose);
 
   if (mobileInput) {
     mobileInput.addEventListener("input", function () {

@@ -11,7 +11,7 @@
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer','GTM-MBGGJ2K2');</script>
   <!-- End Google Tag Manager -->
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=8" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
@@ -162,7 +162,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <p class="otp-success-message">Thank you! We will be in touch soon</p>
     </div>
 
-    <button type="button" id="otp-cancel-btn" class="btn btn-ghost btn-block otp-cancel">Cancel</button>
+    <p id="otp-close-timer" class="otp-close-timer" hidden>
+      Closing in <span id="otp-close-seconds">5</span>s
+    </p>
+    <button type="button" id="otp-cancel-btn" class="btn btn-ghost btn-block otp-cancel">
+      <span id="otp-cancel-progress" class="otp-cancel-progress" hidden></span>
+      <span id="otp-cancel-label" class="otp-cancel-label">Cancel</span>
+    </button>
+  </div>
+</div>
+
+<div id="registration-done" class="registration-done" hidden>
+  <div class="registration-done-card">
+    <div class="otp-success-icon" aria-hidden="true">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <path d="M8 18.5l7 7 13-14" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1 class="otp-success-title">Registration complete</h1>
+    <p class="otp-success-message">Thank you! We will be in touch soon.</p>
+    <p class="registration-done-hint">You can close this tab.</p>
   </div>
 </div>
 
@@ -171,6 +190,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     window.DELTAV_API_URL = location.origin;
   }
 </script>
-<script src="form.js?v=13"></script>
+<script src="form.js?v=18"></script>
 </body>
 </html>

@@ -728,7 +728,59 @@ body {
   letter-spacing: 0.08em;
 }
 
-.otp-cancel { margin-top: 1rem; }
+.otp-cancel:not(.is-countdown) { margin-top: 1rem; }
+
+.otp-close-timer {
+  margin: 1rem 0 0.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.otp-close-timer span {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.otp-cancel-label {
+  position: relative;
+  z-index: 1;
+}
+
+.otp-cancel-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 0;
+  background: rgba(17, 17, 17, 0.1);
+  pointer-events: none;
+}
+
+.otp-cancel.is-countdown {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0;
+  border: 1px solid var(--border);
+  background: #f3f4f6;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.otp-cancel.is-countdown .otp-cancel-progress {
+  animation: otp-close-fill var(--close-countdown, 5s) linear forwards;
+}
+
+.otp-cancel.is-countdown:hover {
+  background: #f3f4f6;
+  color: var(--text);
+}
+
+@keyframes otp-close-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
 
 .otp-success-wrap {
   text-align: center;
@@ -752,6 +804,28 @@ body {
   font-size: 1.375rem;
   font-weight: 700;
   color: var(--text);
+}
+
+.registration-done:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 1.5rem;
+}
+
+.registration-done-card {
+  max-width: 22rem;
+  text-align: center;
+}
+
+.registration-done-hint {
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 
 .otp-success-message {
