@@ -3,38 +3,126 @@
 
   var form = document.getElementById("registration-form");
   var nextInput = document.getElementById("next-url");
+  var registrantSection = document.getElementById("registrant-section");
+  var patientTypeSection = document.getElementById("patient-type-section");
+  var relationshipFields = document.getElementById("relationship-fields");
+  var relationshipSelect = document.getElementById("relationship");
+  var relationshipOtherWrap = document.getElementById("relationship-other-wrap");
+  var relationshipOtherInput = document.getElementById("relationship-other");
+  var radios = form.querySelectorAll('input[name="registrant"]');
 
   var API_BASE = window.DELTAV_API_URL || "";
   var practiceId = new URLSearchParams(window.location.search).get("practice") || "";
-
-  // ── Branding & patient — populated from API ───────────────────────────────
-  var practiceName    = "${practice_name}";  // API variable: practice_name
-  var practiceLogoUrl = "${practice_logo_url}";  // API variable: practice_logo_url
-  var patientFirstName = "${patient_first_name}"; // API variable: patient_first_name
-
-  function applyBranding() {
-    if (practiceName) { 
-      document.title = practiceName + " — Book an Appointment";
-      var logo = document.getElementById("practice-logo");
-      if (logo) logo.setAttribute("alt", practiceName);
-    }
-    if (practiceLogoUrl) {
-      var logo = document.getElementById("practice-logo");
-      if (logo) logo.setAttribute("src", practiceLogoUrl);
-    }
-    var heading = document.getElementById("welcome-heading");
-    if (heading) {
-      heading.textContent = patientFirstName
-        ? "Welcome, " + patientFirstName + "!"
-        : "Welcome!";
-    }
-  }
 
   // ── URL helpers ──────────────────────────────────────────────────────────
   function getNextUrl() {
     var params = new URLSearchParams(window.location.search);
     var next = params.get("next") || params.get("redirect") || "";
     try { return next ? decodeURIComponent(next) : ""; } catch (e) { return ""; }
+  }
+
+  // ── Prefill from URL params ───────────────────────────────────────────────
+  function prefillFromParams() {
+    var p = new URLSearchParams(window.location.search);
+    function get(keys) {
+      for (var i = 0; i < keys.length; i++) {
+        var v = p.get(keys[i]);
+        if (v) return decodeURIComponent(v);
+      }
+      return "";
+    }
+
+    var firstName  = get(["first_name",  "firstname",  "firstName"]);
+    var lastName   = get(["last_name",   "lastname",   "lastName"]);
+    var middleName = get(["middle_name", "middlename", "middleName"]);
+    var dob        = get(["dob", "date_of_birth", "dateofbirth"]);
+
+    function fill(id, val) {
+      if (!val) return;
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.value = val;
+      el.classList.add("prefilled");
+    }
+
+    fill("first-name",  firstName);
+    fill("middle-name", middleName);
+    fill("last-name",   lastName);
+
+    // DOB may arrive as YYYY-MM-DD (ISO) — convert to MM/DD/YYYY for the text input
+    if (dob) {
+      var dobEl = document.getElementById("dob");
+      var isoMatch = dob.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      dobEl.value = isoMatch ? isoMatch[2] + "/" + isoMatch[3] + "/" + isoMatch[1] : dob;
+      dobEl.classList.add("prefilled");
+    }
+
+    // If patient name is supplied → existing patient; hide both toggle sections
+    if (firstName && lastName) {
+      if (registrantSection) registrantSection.hidden = true;
+      if (patientTypeSection) patientTypeSection.hidden = true;
+      var existingRadio = form.querySelector('input[name="patient_type"][value="existing"]');
+      if (existingRadio) existingRadio.checked = true;
+    }
+  }
+
+  // ── Relationship fields ───────────────────────────────────────────────────
+  function showRelationshipFields(show) {
+    relationshipFields.hidden = !show;
+    if (!show) {
+      relationshipSelect.removeAttribute("required");
+      relationshipOtherInput.removeAttribute("required");
+    } else {
+      relationshipSelect.setAttribute("required", "required");
+      toggleRelationshipOther();
+    }
+  }
+
+  function toggleRelationshipOther() {
+    var isOther = relationshipSelect.value === "other";
+    relationshipOtherWrap.hidden = !isOther;
+    if (isOther) {
+      relationshipOtherInput.setAttribute("required", "required");
+    } else {
+      relationshipOtherInput.removeAttribute("required");
+      relationshipOtherInput.value = "";
+    }
+  }
+
+  function toggleFromRegistrant() {
+    var checked = form.querySelector('input[name="registrant"]:checked');
+    showRelationshipFields(checked && checked.value === "another");
+  }
+
+  radios.forEach(function (r) { r.addEventListener("change", toggleFromRegistrant); });
+  relationshipSelect.addEventListener("change", toggleRelationshipOther);
+
+  // ── DOB auto-format MM/DD/YYYY ────────────────────────────────────────────
+  var dobInput = document.getElementById("dob");
+  if (dobInput) {
+    dobInput.addEventListener("input", function () {
+      var val = dobInput.value.replace(/[^\d]/g, "");
+      if (val.length >= 5) {
+        dobInput.value = val.slice(0, 2) + "/" + val.slice(2, 4) + "/" + val.slice(4, 8);
+      } else if (val.length >= 3) {
+        dobInput.value = val.slice(0, 2) + "/" + val.slice(2);
+      }
+    });
+  }
+
+  function parseDob(str) {
+    var parts = str.split("/");
+    if (parts.length !== 3) return null;
+    var mm = parseInt(parts[0], 10), dd = parseInt(parts[1], 10), yyyy = parseInt(parts[2], 10);
+    if (!mm || !dd || !yyyy || mm < 1 || mm > 12 || dd < 1 || dd > 31 || yyyy < 1900) return null;
+    var date = new Date(yyyy, mm - 1, dd);
+    if (date.getMonth() !== mm - 1 || date.getDate() !== dd) return null;
+    return date;
+  }
+
+  function dobToIso(str) {
+    var parts = str.split("/");
+    return parts[2] + "-" + parts[0] + "-" + parts[1];
   }
 
   // ── Calendar & slot picker ────────────────────────────────────────────────
@@ -230,8 +318,29 @@
     clearErrors();
     var valid = true;
 
-    var ap = document.getElementById("agree-privacy");
-    if (!ap.checked) { showError("err-agree-privacy", "Please agree to the privacy policy / HIPAA notice."); valid = false; }
+    var fn  = document.getElementById("first-name");
+    var ln  = document.getElementById("last-name");
+    var dob = document.getElementById("dob");
+    var ca  = document.getElementById("confirm-accurate");
+    var ap  = document.getElementById("agree-privacy");
+
+    if (!fn.value.trim())  { showError("err-first-name", "First name is required."); valid = false; }
+    if (!ln.value.trim())  { showError("err-last-name",  "Last name is required.");  valid = false; }
+    if (!dob.value.trim()) { showError("err-dob", "Date of birth is required."); valid = false; }
+    else {
+      var parsed = parseDob(dob.value.trim());
+      if (!parsed) { showError("err-dob", "Please enter a valid date in MM/DD/YYYY format."); valid = false; }
+      else if (parsed > new Date()) { showError("err-dob", "Date of birth cannot be in the future."); valid = false; }
+    }
+    if (!ca.checked) { showError("err-confirm-accurate", "Please confirm the information is accurate."); valid = false; }
+    if (!ap.checked) { showError("err-agree-privacy",    "Please agree to the privacy policy / HIPAA notice."); valid = false; }
+
+    if (!relationshipFields.hidden) {
+      if (!relationshipSelect.value) { showError("err-relationship", "Please select your relationship to the patient."); valid = false; }
+      if (relationshipSelect.value === "other" && !relationshipOtherInput.value.trim()) {
+        showError("err-relationship-other", "Please specify the relationship."); valid = false;
+      }
+    }
 
     if (!valid) {
       var firstError = form.querySelector(".error-msg:not(:empty)");
@@ -249,6 +358,9 @@
   var pendingPayload = null;
   var sessionId = null;
   var otpTimerId = null;
+  var successCloseTimerId = null;
+  var successCloseIntervalId = null;
+  var SUCCESS_AUTO_CLOSE_SECONDS = 5;
   var resendLocked = false;
 
   var otpModal = document.getElementById("otp-modal");
@@ -259,6 +371,10 @@
   var otpVerifyBtn = document.getElementById("otp-verify-btn");
   var otpResendBtn = document.getElementById("otp-resend-btn");
   var otpCancelBtn = document.getElementById("otp-cancel-btn");
+  var otpCancelProgress = document.getElementById("otp-cancel-progress");
+  var otpCancelLabel = document.getElementById("otp-cancel-label");
+  var otpCloseTimer = document.getElementById("otp-close-timer");
+  var otpCloseSeconds = document.getElementById("otp-close-seconds");
   var otpStepSend = document.getElementById("otp-step-send");
   var otpStepVerify = document.getElementById("otp-step-verify");
   var otpStepSuccess = document.getElementById("otp-step-success");
@@ -297,14 +413,10 @@
   // Full on-file number (server-injected), normalized to 10 US digits. "" when absent.
   function getOnfilePhoneDigits() {
     var v = onfilePhoneInput ? (onfilePhoneInput.value || "").trim() : "";
-    // Ignore an unsubstituted server placeholder or empty value
     if (!v || v === "${phone_number}") return "";
     return normalizeMobileDigits(v);
   }
 
-  // Prefill the mobile field with a masked, read-only on-file number when available.
-  // The real number is still sent on submit (see sendOtp). Falls back to a normal
-  // editable field when there is no number on file, preserving existing behaviour.
   function applyPhone() {
     if (!mobileInput) return;
     var digits = getOnfilePhoneDigits();
@@ -323,6 +435,96 @@
       otpTimerId = null;
     }
     if (otpTimerWrap) otpTimerWrap.hidden = true;
+  }
+
+  function stopSuccessCloseInterval() {
+    if (successCloseIntervalId) {
+      clearInterval(successCloseIntervalId);
+      successCloseIntervalId = null;
+    }
+  }
+
+  function stopSuccessCloseTimer() {
+    if (successCloseTimerId) {
+      clearTimeout(successCloseTimerId);
+      successCloseTimerId = null;
+    }
+    stopSuccessCloseInterval();
+  }
+
+  var registrationFinished = false;
+
+  function finishRegistrationSession() {
+    if (registrationFinished) return;
+    registrationFinished = true;
+    stopSuccessCloseTimer();
+    if (otpModal) {
+      otpModal.hidden = true;
+      otpModal.setAttribute("aria-hidden", "true");
+    }
+    var page = document.querySelector(".page");
+    if (page) page.hidden = true;
+    var done = document.getElementById("registration-done");
+    if (done) done.hidden = false;
+    document.title = "Registration complete";
+  }
+
+  function closeRegistrationTab() {
+    if (registrationFinished) return;
+    stopSuccessCloseTimer();
+    window.close();
+    setTimeout(finishRegistrationSession, 250);
+  }
+
+  function resetCloseCountdownUI() {
+    if (!otpCancelBtn) return;
+    otpCancelBtn.classList.remove("is-countdown");
+    otpCancelBtn.style.removeProperty("--close-countdown");
+    if (otpCancelProgress) {
+      otpCancelProgress.hidden = true;
+      otpCancelProgress.style.animation = "none";
+      otpCancelProgress.style.width = "0";
+      otpCancelProgress.onanimationend = null;
+    }
+    if (otpCancelLabel) otpCancelLabel.textContent = "Cancel";
+    if (otpCloseTimer) otpCloseTimer.hidden = true;
+    if (otpCloseSeconds) otpCloseSeconds.textContent = String(SUCCESS_AUTO_CLOSE_SECONDS);
+  }
+
+  function startCloseCountdownUI() {
+    if (!otpCancelBtn) return;
+    var remaining = SUCCESS_AUTO_CLOSE_SECONDS;
+
+    otpCancelBtn.hidden = false;
+    otpCancelBtn.classList.add("is-countdown");
+    otpCancelBtn.style.setProperty("--close-countdown", SUCCESS_AUTO_CLOSE_SECONDS + "s");
+    if (otpCancelLabel) otpCancelLabel.textContent = "Close";
+    if (otpCloseTimer) otpCloseTimer.hidden = false;
+    if (otpCloseSeconds) otpCloseSeconds.textContent = String(remaining);
+
+    if (otpCancelProgress) {
+      otpCancelProgress.hidden = false;
+      otpCancelProgress.style.animation = "none";
+      void otpCancelProgress.offsetWidth;
+      otpCancelProgress.style.animation = "";
+      otpCancelProgress.onanimationend = function () {
+        closeRegistrationTab();
+      };
+    }
+
+    stopSuccessCloseInterval();
+    successCloseIntervalId = setInterval(function () {
+      remaining -= 1;
+      if (otpCloseSeconds) otpCloseSeconds.textContent = String(Math.max(0, remaining));
+      if (remaining <= 0) stopSuccessCloseInterval();
+    }, 1000);
+
+    scheduleSuccessAutoClose();
+  }
+
+  function scheduleSuccessAutoClose() {
+    stopSuccessCloseTimer();
+    successCloseTimerId = setTimeout(closeRegistrationTab, SUCCESS_AUTO_CLOSE_SECONDS * 1000);
   }
 
   function setResendState(enabled, secondsRemaining) {
@@ -371,7 +573,11 @@
     if (otpStepSend) otpStepSend.hidden = false;
     if (otpStepVerify) otpStepVerify.hidden = true;
     if (otpStepSuccess) otpStepSuccess.hidden = true;
-    if (otpCancelBtn) otpCancelBtn.hidden = false;
+    if (otpCancelBtn) {
+      otpCancelBtn.hidden = false;
+      otpCancelBtn.classList.remove("is-countdown");
+    }
+    resetCloseCountdownUI();
   }
 
   function openOtpModal() {
@@ -404,15 +610,16 @@
     if (otpStepSend) otpStepSend.hidden = true;
     if (otpStepVerify) otpStepVerify.hidden = true;
     if (otpStepSuccess) otpStepSuccess.hidden = false;
-    if (otpCancelBtn) otpCancelBtn.hidden = true;
     if (otpModal) {
       otpModal.hidden = false;
       otpModal.setAttribute("aria-hidden", "false");
     }
+    startCloseCountdownUI();
   }
 
   function closeOtpModal() {
     stopOtpTimer();
+    stopSuccessCloseTimer();
     resetOtpModalSteps();
     if (otpModal) {
       otpModal.hidden = true;
@@ -421,10 +628,31 @@
   }
 
   function buildPayload() {
+    var registrantChecked  = form.querySelector('input[name="registrant"]:checked');
+    var patientTypeChecked = form.querySelector('input[name="patient_type"]:checked');
+    var registrantValue    = registrantChecked  ? registrantChecked.value  : "myself";
+    var patientTypeValue   = patientTypeChecked ? patientTypeChecked.value : "existing";
+
     var payload = {
-      practice:      practiceId,
-      agree_privacy: document.getElementById("agree-privacy").checked,
+      practice:         practiceId,
+      registrant:       registrantValue,
+      patient_type:     patientTypeValue,
+      first_name:       document.getElementById("first-name").value.trim(),
+      last_name:        document.getElementById("last-name").value.trim(),
+      dob:              dobToIso(document.getElementById("dob").value.trim()),
+      confirm_accurate: document.getElementById("confirm-accurate").checked,
+      agree_privacy:    document.getElementById("agree-privacy").checked,
     };
+
+    var middleName = document.getElementById("middle-name").value.trim();
+    if (middleName) payload.middle_name = middleName;
+
+    if (registrantValue === "another") {
+      payload.relationship = relationshipSelect.value;
+      if (relationshipSelect.value === "other") {
+        payload.relationship_other = relationshipOtherInput.value.trim();
+      }
+    }
 
     if (selectedSlots.length > 0) {
       payload.preferred_slots = selectedSlots.map(function (s) { return s.date + " " + s.time; });
@@ -456,9 +684,13 @@
       .then(function (result) {
         if (result.status === 201) {
           window.dataLayer = window.dataLayer || [];
-          window.dataLayer.push({ event: "booking_request" });
+          window.dataLayer.push({
+            event: "booking_request",
+            booking_details: { patient_type: payload.patient_type }
+          });
           showRegistrationSuccess();
           form.reset();
+          toggleFromRegistrant();
         } else if (result.status === 400 && result.data.errors) {
           alert("Validation errors:\n" + result.data.errors.join("\n"));
         } else {
@@ -477,8 +709,6 @@
 
   function sendOtp() {
     clearOtpErrors();
-    // Prefer the real on-file number (the field only shows a masked version);
-    // fall back to whatever the user typed when there's no number on file.
     var onfile = getOnfilePhoneDigits();
     var mobile = onfile.length === 10
       ? onfile
@@ -621,10 +851,18 @@
       });
   }
 
+  function handleOtpCancelOrClose() {
+    if (otpStepSuccess && !otpStepSuccess.hidden) {
+      closeRegistrationTab();
+      return;
+    }
+    closeOtpModal();
+  }
+
   if (otpSendBtn) otpSendBtn.addEventListener("click", sendOtp);
   if (otpResendBtn) otpResendBtn.addEventListener("click", sendOtp);
   if (otpVerifyBtn) otpVerifyBtn.addEventListener("click", verifyOtp);
-  if (otpCancelBtn) otpCancelBtn.addEventListener("click", closeOtpModal);
+  if (otpCancelBtn) otpCancelBtn.addEventListener("click", handleOtpCancelOrClose);
 
   if (mobileInput) {
     mobileInput.addEventListener("input", function () {
@@ -648,6 +886,8 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────
   nextInput.value = getNextUrl();
+  prefillFromParams();
+  toggleFromRegistrant();
 
   var now = new Date();
   calYear  = now.getFullYear();
