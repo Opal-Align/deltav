@@ -249,6 +249,7 @@
     renderTimeSlots(dateStr);
     renderCalendar();
     renderSelectedSlots();
+    updateSubmitState();
   }
 
   function renderSelectedSlots() {
@@ -336,6 +337,14 @@
   function handleRegistrationFailure() {
     closeOtpModal();
     showRegistrationError(REGISTRATION_FAILURE_MESSAGE);
+  }
+
+  function updateSubmitState() {
+    var ca = document.getElementById("confirm-accurate");
+    var ap = document.getElementById("agree-privacy");
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var ready = ca && ca.checked && ap && ap.checked && selectedSlots.length > 0;
+    submitBtn.disabled = !ready;
   }
 
   function validate() {
@@ -915,6 +924,9 @@
     openOtpModal();
   });
 
+  document.getElementById("confirm-accurate").addEventListener("change", updateSubmitState);
+  document.getElementById("agree-privacy").addEventListener("change", updateSubmitState);
+
   // ── Init ──────────────────────────────────────────────────────────────────
   nextInput.value = getNextUrl();
   prefillFromParams();
@@ -925,5 +937,6 @@
   calMonth = now.getMonth();
   selectedDay = null;
   renderCalendar();
+  updateSubmitState();
 
 })();

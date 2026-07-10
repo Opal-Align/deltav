@@ -662,9 +662,8 @@ body {
 
 .btn-primary:disabled,
 .btn-ghost:disabled {
-  opacity: 0.6;
+  opacity: 0.45;
   cursor: not-allowed;
-  pointer-events: none;
 }
 
 #otp-resend-btn:disabled {
