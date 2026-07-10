@@ -80,7 +80,8 @@ public class RegistrationFunction {
         }
 
         try {
-            // Get practice ID from DELTAV_CONTEXT cookie (format: clientId:practiceId)
+            // Get client ID and practice ID from DELTAV_CONTEXT cookie (format: clientId:practiceId)
+            String clientId = CookieUtil.getClientIdFromContext(request.getHeaders());
             Long practiceId = CookieUtil.getPracticeIdFromContext(request.getHeaders());
 
             // Get patient info from request
@@ -107,8 +108,7 @@ public class RegistrationFunction {
             // Publish to queue
             MessagePublisher publisher = MessagePublisherFactory.getPublisher();
             logger.info("Publishing to queue: " + publisher.getType());
-            String clientId = practiceId != null ? String.valueOf(practiceId) : "";
-            publisher.publish(queueMessage, clientId, logger);
+            publisher.publish(queueMessage, clientId != null ? clientId : "", logger);
 
             String redirectUrl = practiceId != null ? PracticeConfig.getRedirectUrl(String.valueOf(practiceId)) : null;
             logger.info("Practice=" + practiceId + ", resolved redirect_url=" + redirectUrl);
