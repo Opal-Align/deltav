@@ -249,7 +249,6 @@
     renderTimeSlots(dateStr);
     renderCalendar();
     renderSelectedSlots();
-    updateSubmitState();
   }
 
   function renderSelectedSlots() {
@@ -339,14 +338,6 @@
     showRegistrationError(REGISTRATION_FAILURE_MESSAGE);
   }
 
-  function updateSubmitState() {
-    var ca = document.getElementById("confirm-accurate");
-    var ap = document.getElementById("agree-privacy");
-    var submitBtn = form.querySelector('button[type="submit"]');
-    var ready = ca && ca.checked && ap && ap.checked && selectedSlots.length > 0;
-    submitBtn.disabled = !ready;
-  }
-
   function validate() {
     clearErrors();
     var valid = true;
@@ -365,6 +356,7 @@
       if (!parsed) { showError("err-dob", "Please enter a valid date in MM/DD/YYYY format."); valid = false; }
       else if (parsed > new Date()) { showError("err-dob", "Date of birth cannot be in the future."); valid = false; }
     }
+    if (selectedSlots.length === 0) { showError("err-slots", "Please select at least one preferred appointment time."); valid = false; }
     if (!ca.checked) { showError("err-confirm-accurate", "Please confirm the information is accurate."); valid = false; }
     if (!ap.checked) { showError("err-agree-privacy",    "Please agree to the privacy policy / HIPAA notice."); valid = false; }
 
@@ -924,9 +916,6 @@
     openOtpModal();
   });
 
-  document.getElementById("confirm-accurate").addEventListener("change", updateSubmitState);
-  document.getElementById("agree-privacy").addEventListener("change", updateSubmitState);
-
   // ── Init ──────────────────────────────────────────────────────────────────
   nextInput.value = getNextUrl();
   prefillFromParams();
@@ -937,6 +926,5 @@
   calMonth = now.getMonth();
   selectedDay = null;
   renderCalendar();
-  updateSubmitState();
 
 })();
