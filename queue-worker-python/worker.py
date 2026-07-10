@@ -266,8 +266,8 @@ class QueueWorker:
         date2, time2 = self._parse_slot(slots[1]) if len(slots) > 1 else (None, None)
         date3, time3 = self._parse_slot(slots[2]) if len(slots) > 2 else (None, None)
 
-        # Parse patientDob as date
-        patient_dob = data.get('patientDob')
+        # Parse dateOfBirth as date
+        patient_dob = data.get('dateOfBirth')
         if patient_dob and isinstance(patient_dob, str):
             patient_dob = datetime.strptime(patient_dob, '%Y-%m-%d').date()
 
@@ -285,7 +285,7 @@ class QueueWorker:
             data.get('patientMiddleName'),
             data.get('patientLastName'),
             patient_dob,
-            data.get('patientPhone'),
+            data.get('mobileNumber'),
             date1,
             time1,
             date2,

@@ -89,6 +89,7 @@ public class RegistrationFunction {
             String patientLastName = getStr(json, "last_name");
             String dateOfBirth = getStr(json, "dob");
             String mobileNumber = getStr(json, "mobile_number");
+            String patientMiddleName = getStr(json, "middle_name");
 
             // Get preferred slots and comments from request
             List<String> preferredSlots = getStringList(json, "preferred_slots");
@@ -98,6 +99,7 @@ public class RegistrationFunction {
             QueueMessage queueMessage = QueueMessage.builder()
                     .practiceId(practiceId)
                     .patientFirstName(patientFirstName)
+                    .patientMiddleName(patientMiddleName)
                     .patientLastName(patientLastName)
                     .dateOfBirth(dateOfBirth)
                     .mobileNumber(mobileNumber)

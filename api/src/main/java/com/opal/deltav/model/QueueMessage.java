@@ -12,6 +12,7 @@ public class QueueMessage {
     private final String patientId;
     private final Long practiceId;
     private final String patientFirstName;
+    private final String patientMiddleName;
     private final String patientLastName;
     private final String dateOfBirth;
     private final String mobileNumber;
@@ -24,6 +25,7 @@ public class QueueMessage {
         this.patientId = builder.patientId;
         this.practiceId = builder.practiceId;
         this.patientFirstName = builder.patientFirstName;
+        this.patientMiddleName = builder.patientMiddleName;
         this.patientLastName = builder.patientLastName;
         this.dateOfBirth = builder.dateOfBirth;
         this.mobileNumber = builder.mobileNumber;
@@ -46,6 +48,10 @@ public class QueueMessage {
 
     public String getPatientFirstName() {
         return patientFirstName;
+    }
+
+    public String getPatientMiddleName() {
+        return patientMiddleName;
     }
 
     public String getPatientLastName() {
@@ -81,6 +87,7 @@ public class QueueMessage {
         private String patientId;
         private Long practiceId;
         private String patientFirstName;
+        private String patientMiddleName;
         private String patientLastName;
         private String dateOfBirth;
         private String mobileNumber;
@@ -105,6 +112,11 @@ public class QueueMessage {
 
         public Builder patientFirstName(String patientFirstName) {
             this.patientFirstName = patientFirstName;
+            return this;
+        }
+
+        public Builder patientMiddleName(String patientMiddleName) {
+            this.patientMiddleName = patientMiddleName;
             return this;
         }
 
