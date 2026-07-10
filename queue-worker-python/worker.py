@@ -57,11 +57,13 @@ class QueueWorker:
     INSERT_SQL = """
         INSERT INTO trace_appt_requests (
             patient_key, patient_id, practice_id,
+            patient_first_name, patient_middle_name, patient_last_name,
+            patient_dob, patient_phone,
             preferred_date1, preferred_time1,
             preferred_date2, preferred_time2,
             preferred_date3, preferred_time3,
             comments, created_dt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     def __init__(self):
@@ -238,10 +240,6 @@ class QueueWorker:
         missing = []
 
         # Check mandatory fields
-        if not data.get('patientKey'):
-            missing.append('patientKey')
-        if not data.get('patientId'):
-            missing.append('patientId')
         if not data.get('practiceId'):
             missing.append('practiceId')
 
@@ -268,6 +266,11 @@ class QueueWorker:
         date2, time2 = self._parse_slot(slots[1]) if len(slots) > 1 else (None, None)
         date3, time3 = self._parse_slot(slots[2]) if len(slots) > 2 else (None, None)
 
+        # Parse patientDob as date
+        patient_dob = data.get('patientDob')
+        if patient_dob and isinstance(patient_dob, str):
+            patient_dob = datetime.strptime(patient_dob, '%Y-%m-%d').date()
+
         # Parse submittedAt as created_dt
         created_dt = data.get('submittedAt')
         if created_dt and isinstance(created_dt, str):
@@ -278,6 +281,11 @@ class QueueWorker:
             data.get('patientKey'),
             data.get('patientId'),
             data.get('practiceId'),
+            data.get('patientFirstName'),
+            data.get('patientMiddleName'),
+            data.get('patientLastName'),
+            patient_dob,
+            data.get('patientPhone'),
             date1,
             time1,
             date2,
