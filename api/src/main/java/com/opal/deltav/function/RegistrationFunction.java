@@ -9,6 +9,7 @@ import com.opal.deltav.config.PracticeConfig;
 import com.opal.deltav.model.QueueMessage;
 import com.opal.deltav.streaming.MessagePublisher;
 import com.opal.deltav.streaming.MessagePublisherFactory;
+import com.opal.deltav.util.CookieUtil;
 import com.opal.deltav.util.TokenUtil;
 
 import java.util.*;
@@ -79,21 +80,13 @@ public class RegistrationFunction {
         }
 
         try {
-            // Get practice ID from request (optional - for redirect URL)
-            String practiceIdStr = getStr(json, "practice");
-            Long practiceId = null;
-            if (practiceIdStr != null && !practiceIdStr.isBlank()) {
-                try {
-                    practiceId = Long.parseLong(practiceIdStr);
-                } catch (NumberFormatException e) {
-                    // Ignore invalid practice ID
-                }
-            }
+            // Get practice ID from DELTAV_CONTEXT cookie (format: clientId:practiceId)
+            Long practiceId = CookieUtil.getPracticeIdFromContext(request.getHeaders());
 
             // Get patient info from request
-            String patientFirstName = getStr(json, "patient_first_name");
-            String patientLastName = getStr(json, "patient_last_name");
-            String dateOfBirth = getStr(json, "date_of_birth");
+            String patientFirstName = getStr(json, "first_name");
+            String patientLastName = getStr(json, "last_name");
+            String dateOfBirth = getStr(json, "dob");
             String mobileNumber = getStr(json, "mobile_number");
 
             // Get preferred slots and comments from request
@@ -133,19 +126,19 @@ public class RegistrationFunction {
     private List<String> validate(JsonObject json) {
         List<String> errors = new ArrayList<>();
 
-        String firstName = getStr(json, "patient_first_name");
+        String firstName = getStr(json, "first_name");
         if (firstName == null || firstName.isBlank()) {
-            errors.add("Patient first name is required");
+            errors.add("first name is required");
         }
 
-        String lastName = getStr(json, "patient_last_name");
+        String lastName = getStr(json, "last_name");
         if (lastName == null || lastName.isBlank()) {
-            errors.add("Patient last name is required");
+            errors.add("last name is required");
         }
 
-        String dob = getStr(json, "date_of_birth");
+        String dob = getStr(json, "dob");
         if (dob == null || dob.isBlank()) {
-            errors.add("Date of birth is required");
+            errors.add("dob is required");
         }
 
         String mobile = getStr(json, "mobile_number");
