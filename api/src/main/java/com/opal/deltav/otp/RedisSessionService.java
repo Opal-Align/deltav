@@ -16,7 +16,7 @@ public final class RedisSessionService {
     }
 
     public static String createSession(String practiceId, Logger logger) {
-        return createSession(practiceId, null);
+        return createSession(practiceId, null, logger);
     }
 
     public static String createSession(String practiceId, String token, Logger logger) {

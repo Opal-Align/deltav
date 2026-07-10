@@ -312,6 +312,30 @@
   function clearErrors() {
     form.querySelectorAll(".error-msg").forEach(function (el) { el.textContent = ""; });
     form.querySelectorAll(".has-error").forEach(function (el) { el.classList.remove("has-error"); });
+    clearRegistrationError();
+  }
+
+  var REGISTRATION_FAILURE_MESSAGE =
+    "We couldn't complete your registration right now. Please try again in a few minutes.";
+
+  function showRegistrationError(message) {
+    var el = document.getElementById("registration-error");
+    if (!el) return;
+    el.textContent = message || REGISTRATION_FAILURE_MESSAGE;
+    el.hidden = false;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  function clearRegistrationError() {
+    var el = document.getElementById("registration-error");
+    if (!el) return;
+    el.textContent = "";
+    el.hidden = true;
+  }
+
+  function handleRegistrationFailure() {
+    closeOtpModal();
+    showRegistrationError(REGISTRATION_FAILURE_MESSAGE);
   }
 
   function validate() {
@@ -357,6 +381,7 @@
   // ── Submit + OTP verification ─────────────────────────────────────────────
   var pendingPayload = null;
   var sessionId = null;
+  var verifiedMobileNumber = null;
   var otpTimerId = null;
   var successCloseTimerId = null;
   var successCloseIntervalId = null;
@@ -580,11 +605,19 @@
     resetCloseCountdownUI();
   }
 
+  function resolveOtpMobile() {
+    var onfile = getOnfilePhoneDigits();
+    return onfile.length === 10
+      ? onfile
+      : normalizeMobileDigits(mobileInput ? mobileInput.value : "");
+  }
+
   function openOtpModal() {
     clearOtpErrors();
     stopOtpTimer();
     resendLocked = false;
     sessionId = null;
+    verifiedMobileNumber = null;
     resetOtpModalSteps();
     applyPhone();
     if (otpResendBtn) {
@@ -683,6 +716,7 @@
       })
       .then(function (result) {
         if (result.status === 201) {
+          clearRegistrationError();
           window.dataLayer = window.dataLayer || [];
           window.dataLayer.push({
             event: "booking_request",
@@ -691,14 +725,12 @@
           showRegistrationSuccess();
           form.reset();
           toggleFromRegistrant();
-        } else if (result.status === 400 && result.data.errors) {
-          alert("Validation errors:\n" + result.data.errors.join("\n"));
         } else {
-          alert("Something went wrong. Please try again.");
+          handleRegistrationFailure();
         }
       })
       .catch(function () {
-        alert("Network error. Please check your connection and try again.");
+        handleRegistrationFailure();
       })
       .finally(function () {
         if (otpStepSuccess && !otpStepSuccess.hidden) return;
@@ -709,10 +741,7 @@
 
   function sendOtp() {
     clearOtpErrors();
-    var onfile = getOnfilePhoneDigits();
-    var mobile = onfile.length === 10
-      ? onfile
-      : normalizeMobileDigits(mobileInput ? mobileInput.value : "");
+    var mobile = resolveOtpMobile();
     if (mobile.length !== 10) {
       showOtpError("err-mobile", "Please enter a valid 10-digit mobile number.");
       return;
@@ -767,6 +796,7 @@
         }
 
         sessionId = result.data.session_id;
+        verifiedMobileNumber = mobile;
         if (otpStepSend) otpStepSend.hidden = true;
         if (otpStepVerify) otpStepVerify.hidden = false;
         if (otpInput) {
@@ -829,6 +859,7 @@
           stopOtpTimer();
           if (pendingPayload) {
             pendingPayload.session_id = sessionId;
+            pendingPayload.mobile_number = verifiedMobileNumber || resolveOtpMobile();
             return submitRegistration(pendingPayload);
           }
           return;
