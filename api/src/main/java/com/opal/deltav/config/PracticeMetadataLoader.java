@@ -17,31 +17,31 @@ import java.util.logging.Logger;
  * Loads practice metadata from Azure Table Storage into an in-memory cache.
  * Key: Base64 encoded string of "clientId_practiceId" (stored as RowKey in table)
  * Value: PracticeMetadata POJO
- *
+ * <p>
  * Call initialize() from WarmupFunction to load metadata during function startup.
  */
 public class PracticeMetadataLoader {
 
     private static final long CACHE_TTL_MS = 10 * 60 * 1000L; // 10 minutes
-    private static final Logger logger = Logger.getLogger(PracticeMetadataLoader.class.getName());
 
     private static volatile Map<String, PracticeMetadata> metadataMap;
     private static volatile Instant cacheExpiry = Instant.EPOCH;
     private static final Object lock = new Object();
     private static volatile boolean initialized = false;
 
-    private PracticeMetadataLoader() {}
+    private PracticeMetadataLoader() {
+    }
 
     /**
      * Initialize and load metadata from Azure Table Storage.
      * Called from WarmupFunction during function app startup.
      */
-    public static void initialize() {
+    public static void initialize(Logger logger) {
         if (!initialized) {
             synchronized (lock) {
                 if (!initialized) {
                     logger.info("PracticeMetadataLoader: initializing...");
-                    metadataMap = loadFromTable();
+                    metadataMap = loadFromTable(logger);
                     cacheExpiry = Instant.now().plusMillis(CACHE_TTL_MS);
                     initialized = true;
                     logger.info("PracticeMetadataLoader: initialization complete");
@@ -53,11 +53,11 @@ public class PracticeMetadataLoader {
     /**
      * Get the metadata map, loading from Azure Table Storage if cache is expired.
      */
-    public static Map<String, PracticeMetadata> getMetadataMap() {
+    public static Map<String, PracticeMetadata> getMetadataMap(Logger logger) {
         if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
             synchronized (lock) {
                 if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
-                    metadataMap = loadFromTable();
+                    metadataMap = loadFromTable(logger);
                     cacheExpiry = Instant.now().plusMillis(CACHE_TTL_MS);
                 }
             }
@@ -68,28 +68,28 @@ public class PracticeMetadataLoader {
     /**
      * Get practice metadata by Base64 encoded key (clientId:practiceId).
      */
-    public static PracticeMetadata getMetadata(String base64Key) {
-        if (!isValidKey(base64Key)) return null;
-        return getMetadataMap().get(base64Key);
+    public static PracticeMetadata getMetadata(String base64Key, Logger logger) {
+        if (!isValidKey(base64Key, logger)) return null;
+        return getMetadataMap(logger).get(base64Key);
     }
 
     /**
      * Check if a key is valid (8 characters and exists in metadata).
      */
-    public static boolean isValidKey(String base64Key) {
+    public static boolean isValidKey(String base64Key, Logger logger) {
         if (base64Key == null || base64Key.length() != 8) return false;
-        return getMetadataMap().containsKey(base64Key);
+        return getMetadataMap(logger).containsKey(base64Key);
     }
 
     /**
      * Check if a key exists in metadata (without length validation).
      */
-    public static boolean exists(String base64Key) {
+    public static boolean exists(String base64Key, Logger logger) {
         if (base64Key == null || base64Key.isBlank()) return false;
-        return getMetadataMap().containsKey(base64Key);
+        return getMetadataMap(logger).containsKey(base64Key);
     }
 
-    private static Map<String, PracticeMetadata> loadFromTable() {
+    private static Map<String, PracticeMetadata> loadFromTable(Logger logger) {
         String storageAccountName = System.getenv("STORAGE_ACCOUNT_NAME");
         String connStr = System.getenv("AzureWebJobsStorage");
         String tableName = System.getenv("PRACTICE_METADATA_TABLE");

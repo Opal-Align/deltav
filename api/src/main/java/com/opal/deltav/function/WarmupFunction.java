@@ -21,9 +21,9 @@ public class WarmupFunction {
         logger.info("Warmup function triggered - initializing caches...");
 
         // Initialize practice metadata loader
-        PracticeMetadataLoader.initialize();
+        PracticeMetadataLoader.initialize(logger);
 
         logger.info("Warmup complete - metadata cache initialized with " +
-                PracticeMetadataLoader.getMetadataMap().size() + " entries");
+                PracticeMetadataLoader.getMetadataMap(logger).size() + " entries");
     }
 }

@@ -81,8 +81,8 @@ public class RegistrationFunction {
 
         try {
             // Get client ID and practice ID from signed DELTAV_CONTEXT cookie
-            String clientId = CookieUtil.getClientIdFromContext(request.getHeaders());
-            Long practiceId = CookieUtil.getPracticeIdFromContext(request.getHeaders());
+            String clientId = CookieUtil.getClientIdFromContext(request.getHeaders(), logger);
+            Long practiceId = CookieUtil.getPracticeIdFromContext(request.getHeaders(), logger);
 
             // Validate cookie - return FORBIDDEN if missing or tampered
             if (clientId == null || practiceId == null) {
@@ -199,7 +199,7 @@ public class RegistrationFunction {
         HttpResponseMessage.Builder builder = request.createResponseBuilder(status);
         if (body != null) {
             builder.body(gson.toJson(body))
-                   .header("Content-Type", "application/json");
+                    .header("Content-Type", "application/json");
         }
         addCorsHeaders(builder, request);
         return builder.build();
@@ -209,10 +209,10 @@ public class RegistrationFunction {
         String origin = request.getHeaders() != null ? request.getHeaders().get("Origin") : null;
         if (origin == null || origin.isBlank()) origin = "*";
         builder.header("Access-Control-Allow-Origin", origin)
-               .header("Vary", "Origin")
-               .header("Access-Control-Allow-Methods", "POST, OPTIONS")
-               .header("Access-Control-Allow-Headers", "Content-Type, X-Registration-Token")
-               .header("Access-Control-Max-Age", "3600");
+                .header("Vary", "Origin")
+                .header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                .header("Access-Control-Allow-Headers", "Content-Type, X-Registration-Token")
+                .header("Access-Control-Max-Age", "3600");
     }
 
     private String getHeaderIgnoreCase(Map<String, String> headers, String name) {

@@ -69,7 +69,7 @@ public class LogoFunction {
         }
 
         // Get practice metadata to find actual logo filename
-        PracticeMetadata metadata = PracticeMetadataLoader.getMetadata(id);
+        PracticeMetadata metadata = PracticeMetadataLoader.getMetadata(id, logger);
         if (metadata == null) {
             logger.warning("Logo request rejected: practice not found for id: " + id);
             return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)

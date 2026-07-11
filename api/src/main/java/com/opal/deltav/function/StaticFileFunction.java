@@ -156,7 +156,7 @@ public class StaticFileFunction {
         logger.info("Path segment received: " + pathSegment);
 
         // Validate key using PracticeMetadataLoader (must be 8 chars and exist in metadata)
-        if (!PracticeMetadataLoader.isValidKey(pathSegment)) {
+        if (!PracticeMetadataLoader.isValidKey(pathSegment, logger)) {
             logger.warning("Invalid or unknown practice key: " + pathSegment);
             return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
                     .header("Content-Type", "text/html; charset=utf-8")
@@ -164,7 +164,7 @@ public class StaticFileFunction {
         }
 
         // Fetch practice metadata
-        PracticeMetadata metadata = PracticeMetadataLoader.getMetadata(pathSegment);
+        PracticeMetadata metadata = PracticeMetadataLoader.getMetadata(pathSegment, logger);
         if (metadata == null || !metadata.isActive()) {
             logger.warning("Practice not found or inactive: " + pathSegment);
             return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)

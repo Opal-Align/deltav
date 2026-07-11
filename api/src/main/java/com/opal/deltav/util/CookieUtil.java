@@ -4,6 +4,7 @@ import com.opal.deltav.config.PracticeMetadataLoader;
 import com.opal.deltav.model.PracticeMetadata;
 
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Utility class for parsing cookies from HTTP headers.
@@ -71,10 +72,10 @@ public final class CookieUtil {
      * @param headers the HTTP headers map
      * @return the PracticeMetadata, or null if not found
      */
-    public static PracticeMetadata getMetadataFromContext(Map<String, String> headers) {
+    public static PracticeMetadata getMetadataFromContext(Map<String, String> headers, Logger logger) {
         String contextKey = getContextKey(headers);
         if (contextKey == null || contextKey.isBlank()) return null;
-        return PracticeMetadataLoader.getMetadata(contextKey);
+        return PracticeMetadataLoader.getMetadata(contextKey, logger);
     }
 
     /**
@@ -84,8 +85,8 @@ public final class CookieUtil {
      * @param headers the HTTP headers map
      * @return the practice ID as Long, or null if not found
      */
-    public static Long getPracticeIdFromContext(Map<String, String> headers) {
-        PracticeMetadata metadata = getMetadataFromContext(headers);
+    public static Long getPracticeIdFromContext(Map<String, String> headers, Logger logger) {
+        PracticeMetadata metadata = getMetadataFromContext(headers, logger);
         if (metadata == null || metadata.getPracticeId() == null) return null;
         try {
             return Long.parseLong(metadata.getPracticeId());
@@ -101,8 +102,8 @@ public final class CookieUtil {
      * @param headers the HTTP headers map
      * @return the client ID as String, or null if not found
      */
-    public static String getClientIdFromContext(Map<String, String> headers) {
-        PracticeMetadata metadata = getMetadataFromContext(headers);
+    public static String getClientIdFromContext(Map<String, String> headers, Logger logger) {
+        PracticeMetadata metadata = getMetadataFromContext(headers, logger);
         return metadata != null ? metadata.getClientId() : null;
     }
 

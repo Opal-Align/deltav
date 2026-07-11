@@ -58,7 +58,7 @@ public class OtpFunction {
 
             if (practiceId == null || practiceId.isBlank()) {
                 // Try to get from cookie via PracticeMetadataLoader
-                Long practiceIdLong = CookieUtil.getPracticeIdFromContext(request.getHeaders());
+                Long practiceIdLong = CookieUtil.getPracticeIdFromContext(request.getHeaders(), logger);
                 if (practiceIdLong != null) {
                     practiceId = String.valueOf(practiceIdLong);
                     logger.info("Found practice ID from cookie: " + practiceId);
