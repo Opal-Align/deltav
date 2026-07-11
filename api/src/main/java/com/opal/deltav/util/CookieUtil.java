@@ -44,7 +44,7 @@ public final class CookieUtil {
      * @param headers the HTTP headers map
      * @return the base64 key if both cookies are valid and match, or null otherwise
      */
-    public static String getContextKey(Map<String, String> headers) {
+    public static String getContextKey(Map<String, String> headers, Logger logger) {
         // Read normal cookie
         String normalValue = getCookieValue(headers, "DELTAV_CONTEXT");
         if (normalValue == null || normalValue.isBlank()) return null;
@@ -59,6 +59,7 @@ public final class CookieUtil {
 
         // Verify that normal cookie matches the signed value
         if (!normalValue.equals(verifiedValue)) {
+            logger.info("Cookie is tampered");
             return null; // Cookie tampering detected
         }
 
@@ -73,7 +74,7 @@ public final class CookieUtil {
      * @return the PracticeMetadata, or null if not found
      */
     public static PracticeMetadata getMetadataFromContext(Map<String, String> headers, Logger logger) {
-        String contextKey = getContextKey(headers);
+        String contextKey = getContextKey(headers, logger);
         if (contextKey == null || contextKey.isBlank()) return null;
         return PracticeMetadataLoader.getMetadata(contextKey, logger);
     }

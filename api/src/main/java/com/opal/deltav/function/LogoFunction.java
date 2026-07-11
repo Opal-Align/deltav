@@ -54,7 +54,7 @@ public class LogoFunction {
         }
 
         // Verify cookie and get context key
-        String contextKey = CookieUtil.getContextKey(request.getHeaders());
+        String contextKey = CookieUtil.getContextKey(request.getHeaders(), logger);
         if (contextKey == null) {
             logger.warning("Logo request rejected: invalid or missing context cookie");
             return addCors(request, request.createResponseBuilder(HttpStatus.FORBIDDEN)
