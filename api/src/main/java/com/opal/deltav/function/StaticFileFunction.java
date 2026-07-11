@@ -241,6 +241,8 @@ public class StaticFileFunction {
             // Build two cookies:
             // 1. Normal cookie for frontend to read
             // 2. Signed cookie for backend verification (HttpOnly)
+            // Note: Azure Functions Java Builder.header() uses Map.put() which replaces values,
+            // so we combine both cookies in a single header separated by comma
             String signedValue = CookieSigningUtil.sign(pathSegment);
             String contextCookie = String.format("DELTAV_CONTEXT=%s; Max-Age=%d; Path=/; SameSite=Strict",
                     pathSegment, cookieTtlSeconds);
@@ -250,8 +252,7 @@ public class StaticFileFunction {
             return addCors(request, request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", "text/html; charset=utf-8")
                     .header("Cache-Control", "no-store, must-revalidate")
-                    .header("Set-Cookie", contextCookie)
-                    .header("Set-Cookie", signedCookie)
+                    .header("Set-Cookie", contextCookie + ", " + signedCookie)
                     .body(html.getBytes(StandardCharsets.UTF_8))).build();
 
         } catch (IOException e) {
