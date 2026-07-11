@@ -22,11 +22,19 @@ on:
         options:
           - opalalign-rg-dev
           - opalalign-rg
+      functionAppName:
+        description: 'Azure Function App to deploy to'
+        required: true
+        default: deltavapi-dev
+        type: choice
+        options:
+          - trace-app-prod
+          - deltavapi-dev
+          - deltavapi
 
 env:
   JAVA_VERSION: '21'
-  BASE_APP_NAME: deltav-api
-  FUNCTION_APP_NAME: ${{ github.event.inputs.environment == 'main' && 'deltavapi' || format('deltavapi-{0}', github.event.inputs.environment) }}
+  FUNCTION_APP_NAME: ${{ github.event.inputs.functionAppName }}
   RESOURCE_GROUP_NAME: ${{ github.event.inputs.resourceGroupName }}
 
 jobs:
