@@ -37,30 +37,26 @@ public final class CookieUtil {
 
     /**
      * Get the DELTAV_CONTEXT cookie value (base64 encoded key).
-     * Verifies that:
-     * 1. The signed cookie (DELTAV_CONTEXT_SIG) has a valid signature
-     * 2. The normal cookie (DELTAV_CONTEXT) matches the signed value
+     * The cookie contains a signed value in format: value.signature
+     * This method verifies the signature and extracts the original value.
      *
      * @param headers the HTTP headers map
-     * @return the base64 key if both cookies are valid and match, or null otherwise
+     * @param logger  the logger for debugging
+     * @return the base64 key if signature is valid, or null otherwise
      */
     public static String getContextKey(Map<String, String> headers, Logger logger) {
-        // Read normal cookie
-        String normalValue = getCookieValue(headers, "DELTAV_CONTEXT");
-        if (normalValue == null || normalValue.isBlank()) return null;
-
-        // Read signed cookie and verify signature
-        String signedValue = getCookieValue(headers, "DELTAV_CONTEXT_SIG");
-        if (signedValue == null || signedValue.isBlank()) return null;
+        // Read signed cookie (format: value.signature)
+        String signedValue = getCookieValue(headers, "DELTAV_CONTEXT");
+        if (signedValue == null || signedValue.isBlank()) {
+            logger.warning("DELTAV_CONTEXT cookie not found");
+            return null;
+        }
 
         // Verify signature and extract the original value
         String verifiedValue = CookieSigningUtil.verifyAndExtract(signedValue);
-        if (verifiedValue == null) return null;
-
-        // Verify that normal cookie matches the signed value
-        if (!normalValue.equals(verifiedValue)) {
-            logger.info("Cookie is tampered");
-            return null; // Cookie tampering detected
+        if (verifiedValue == null) {
+            logger.warning("Cookie signature verification failed - possible tampering");
+            return null;
         }
 
         return verifiedValue;
