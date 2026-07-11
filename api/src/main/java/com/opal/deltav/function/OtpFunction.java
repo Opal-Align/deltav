@@ -8,6 +8,7 @@ import com.opal.deltav.otp.RedisOtpService;
 import com.opal.deltav.otp.RedisSessionService;
 import com.opal.deltav.otp.RegistrationSession;
 import com.opal.deltav.otp.SmsOtpSender;
+import com.opal.deltav.util.CookieUtil;
 import com.opal.deltav.util.PhoneUtil;
 
 import java.util.HashMap;
@@ -56,12 +57,17 @@ public class OtpFunction {
             }
 
             if (practiceId == null || practiceId.isBlank()) {
-                // Try to get from cookie
-                practiceId = extractPracticeIdFromCookie(request.getHeaders(), logger);
+                // Try to get from cookie via PracticeMetadataLoader
+                Long practiceIdLong = CookieUtil.getPracticeIdFromContext(request.getHeaders());
+                if (practiceIdLong != null) {
+                    practiceId = String.valueOf(practiceIdLong);
+                    logger.info("Found practice ID from cookie: " + practiceId);
+                }
             }
 
             if (practiceId == null || practiceId.isBlank()) {
-                practiceId = "default"; // Use default if not provided
+                logger.warning("OTP send rejected: practice ID not found in cookie");
+                return jsonResponse(request, HttpStatus.FORBIDDEN, Map.of("error", "Invalid session context"));
             }
 
             String phoneE164 = PhoneUtil.toE164(mobile);
@@ -263,38 +269,5 @@ public class OtpFunction {
                 .header("Access-Control-Allow-Methods", "POST, OPTIONS")
                 .header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Registration-Token")
                 .header("Access-Control-Max-Age", "3600");
-    }
-
-    private static String extractPracticeIdFromCookie(Map<String, String> headers, Logger logger) {
-        String cookieHeader = getHeaderIgnoreCase(headers, "Cookie");
-        if (cookieHeader == null || cookieHeader.isBlank()) {
-            return null;
-        }
-
-        for (String cookie : cookieHeader.split(";")) {
-            String trimmed = cookie.trim();
-            if (trimmed.startsWith("DELTAV_CONTEXT=")) {
-                String context = trimmed.substring("DELTAV_CONTEXT=".length()).trim();
-                // Context format: clientId:practiceId
-                if (context.contains(":")) {
-                    String[] parts = context.split(":", 2);
-                    if (parts.length == 2) {
-                        String practiceId = parts[1].trim();
-                        logger.info("Found practice ID in context cookie: " + practiceId);
-                        return practiceId;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static String getHeaderIgnoreCase(Map<String, String> headers, String name) {
-        if (headers == null || name == null) return null;
-        for (Map.Entry<String, String> e : headers.entrySet()) {
-            if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue();
-        }
-        return null;
     }
 }

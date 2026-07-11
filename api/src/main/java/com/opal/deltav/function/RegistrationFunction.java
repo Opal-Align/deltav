@@ -80,9 +80,15 @@ public class RegistrationFunction {
         }
 
         try {
-            // Get client ID and practice ID from DELTAV_CONTEXT cookie (format: clientId:practiceId)
+            // Get client ID and practice ID from signed DELTAV_CONTEXT cookie
             String clientId = CookieUtil.getClientIdFromContext(request.getHeaders());
             Long practiceId = CookieUtil.getPracticeIdFromContext(request.getHeaders());
+
+            // Validate cookie - return FORBIDDEN if missing or tampered
+            if (clientId == null || practiceId == null) {
+                logger.warning("Registration rejected: invalid or missing context cookie");
+                return jsonResponse(request, HttpStatus.FORBIDDEN, Map.of("error", "Invalid session context"));
+            }
 
             // Get patient info from request
             String patientFirstName = getStr(json, "first_name");

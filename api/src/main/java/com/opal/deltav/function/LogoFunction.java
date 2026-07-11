@@ -7,6 +7,9 @@ import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.microsoft.azure.functions.*;
 import com.microsoft.azure.functions.annotation.*;
+import com.opal.deltav.config.PracticeMetadataLoader;
+import com.opal.deltav.model.PracticeMetadata;
+import com.opal.deltav.util.CookieUtil;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -16,6 +19,8 @@ import java.util.logging.Logger;
 
 /**
  * Serves practice logo images from Azure Blob Storage.
+ * URL format: /api/logo/{id}.png
+ * The actual logo filename is fetched from practice metadata using the id.
  */
 public class LogoFunction {
 
@@ -42,14 +47,43 @@ public class LogoFunction {
                     .body("Logo path is required")).build();
         }
 
-        // Prevent directory traversal
-        if (logoPath.contains("..") || logoPath.startsWith("/")) {
-            logger.warning("Invalid logo path attempted: " + logoPath);
-            return addCors(request, request.createResponseBuilder(HttpStatus.BAD_REQUEST)
-                    .body("Invalid logo path")).build();
+        // Extract id from path (e.g., "ABC12345.png" -> "ABC12345")
+        String id = logoPath;
+        if (logoPath.contains(".")) {
+            id = logoPath.substring(0, logoPath.lastIndexOf('.'));
         }
 
-        logger.info("Fetching logo: " + logoPath);
+        // Verify cookie and get context key
+        String contextKey = CookieUtil.getContextKey(request.getHeaders());
+        if (contextKey == null) {
+            logger.warning("Logo request rejected: invalid or missing context cookie");
+            return addCors(request, request.createResponseBuilder(HttpStatus.FORBIDDEN)
+                    .body("Invalid session")).build();
+        }
+
+        // Verify the requested id matches the context (security check)
+        if (!id.equals(contextKey)) {
+            logger.warning("Logo request rejected: id mismatch. Requested: " + id + ", Context: " + contextKey);
+            return addCors(request, request.createResponseBuilder(HttpStatus.FORBIDDEN)
+                    .body("Access denied")).build();
+        }
+
+        // Get practice metadata to find actual logo filename
+        PracticeMetadata metadata = PracticeMetadataLoader.getMetadata(id);
+        if (metadata == null) {
+            logger.warning("Logo request rejected: practice not found for id: " + id);
+            return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                    .body("Logo not found")).build();
+        }
+
+        String actualLogoName = metadata.getLogoName();
+        if (actualLogoName == null || actualLogoName.isBlank()) {
+            logger.info("No logo configured for practice: " + id);
+            return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                    .body("Logo not found")).build();
+        }
+
+        logger.info("Fetching logo: " + actualLogoName + " for practice id: " + id);
 
         try {
             BlobContainerClient container = getContainerClient(logger);
@@ -59,9 +93,9 @@ public class LogoFunction {
                         .body("Storage not configured")).build();
             }
 
-            BlobClient blobClient = container.getBlobClient(logoPath);
+            BlobClient blobClient = container.getBlobClient(actualLogoName);
             if (!blobClient.exists()) {
-                logger.warning("Logo not found: " + logoPath);
+                logger.warning("Logo not found in blob: " + actualLogoName);
                 return addCors(request, request.createResponseBuilder(HttpStatus.NOT_FOUND)
                         .body("Logo not found")).build();
             }
@@ -69,7 +103,7 @@ public class LogoFunction {
             // Get content type from blob properties or guess from filename
             String contentType = blobClient.getProperties().getContentType();
             if (contentType == null || contentType.isBlank() || "application/octet-stream".equals(contentType)) {
-                contentType = URLConnection.guessContentTypeFromName(logoPath);
+                contentType = URLConnection.guessContentTypeFromName(actualLogoName);
                 if (contentType == null) {
                     contentType = "image/png"; // default for logos
                 }
@@ -97,7 +131,7 @@ public class LogoFunction {
             }
 
         } catch (Exception e) {
-            logger.severe("Error fetching logo '" + logoPath + "': " + e.getMessage());
+            logger.severe("Error fetching logo '" + actualLogoName + "': " + e.getMessage());
             return addCors(request, request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error fetching logo")).build();
         }
