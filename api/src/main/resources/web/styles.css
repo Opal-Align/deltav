@@ -726,19 +726,6 @@ body {
   color: var(--text-muted);
 }
 
-.otp-poc-hint {
-  margin-top: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
-  background: #eff6ff;
-  border: 1px solid #93c5fd;
-  color: #1e40af;
-  font-size: 1rem;
-  font-weight: 600;
-  text-align: center;
-  letter-spacing: 0.08em;
-}
-
 .otp-cancel:not(.is-countdown) { margin-top: 1rem; }
 
 .otp-close-timer {

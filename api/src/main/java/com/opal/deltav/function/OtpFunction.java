@@ -197,9 +197,9 @@ public class OtpFunction {
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", result.error));
         }
 
-        if (!SmsOtpSender.isConfigured() && !isPocMode()) {
+        if (!SmsOtpSender.isConfigured() && !SmsOtpSender.isSmsDisabled()) {
             RedisOtpService.clearOtp(session.sessionId, logger);
-            logger.severe("SMS is not configured and OTP_POC_MODE is disabled");
+            logger.severe("SMS is not configured");
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "sms_not_configured"));
         }
         logger.info("Triggering otp from deliverOtp ");
@@ -217,10 +217,6 @@ public class OtpFunction {
         body.put("phone_masked", RedisSessionService.maskPhone(session.phoneE164));
         body.put("expires_in_seconds", result.expiresInSeconds);
         body.put("sends_remaining", result.sendsRemaining);
-        if (isPocMode()) {
-            body.put("poc_otp", result.otp);
-            logger.info("POC OTP shown in response for session " + session.sessionId);
-        }
         return jsonResponse(request, HttpStatus.OK, body);
     }
 
@@ -237,11 +233,6 @@ public class OtpFunction {
 
     private static String getString(JsonObject json, String field) {
         return json.has(field) && !json.get(field).isJsonNull() ? json.get(field).getAsString() : null;
-    }
-
-    private static boolean isPocMode() {
-        String flag = System.getenv("OTP_POC_MODE");
-        return flag != null && ("true".equalsIgnoreCase(flag) || "1".equals(flag));
     }
 
     private static HttpResponseMessage jsonResponse(HttpRequestMessage<?> request, HttpStatus status, Map<String, ?> body) {

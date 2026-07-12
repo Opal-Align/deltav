@@ -408,7 +408,6 @@
   var otpModalSub = document.querySelector(".otp-modal-sub");
   var otpTimerWrap = document.getElementById("otp-timer");
   var otpTimerValue = document.getElementById("otp-timer-value");
-  var otpPocHint = document.getElementById("otp-poc-hint");
 
   function authHeaders() {
     return {
@@ -626,10 +625,6 @@
       otpResendBtn.textContent = "Resend OTP";
     }
     if (otpInput) otpInput.value = "";
-    if (otpPocHint) {
-      otpPocHint.hidden = true;
-      otpPocHint.textContent = "";
-    }
     if (otpModal) {
       otpModal.hidden = false;
       otpModal.setAttribute("aria-hidden", "false");
@@ -807,10 +802,6 @@
         sendSucceeded = true;
         showOtpError("err-otp", "");
         startOtpTimer(result.data.expires_in_seconds || 60);
-        if (result.data.poc_otp && otpPocHint) {
-          otpPocHint.hidden = false;
-          otpPocHint.textContent = "Development — your code is " + result.data.poc_otp;
-        }
       })
       .catch(function () {
         showOtpError(isResend ? "err-otp" : "err-mobile", "Network error. Please try again.");

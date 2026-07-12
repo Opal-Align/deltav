@@ -103,5 +103,4 @@ jobs:
                 "REDIS_PORT=${{ vars.REDIS_PORT }}" \
                 "AZURE_COMMUNICATION_CONNECTION_STRING=${{ vars.AZURE_COMMUNICATION_CONNECTION_STRING }}" \
                 "SMS_DEFAULT_FROM_NUMBER=${{ vars.SMS_DEFAULT_FROM_NUMBER }}" \
-                "KEY_VAULT_URL=${{ vars.KEY_VAULT_URL }}" \
-                "OTP_POC_MODE=true"
+                "KEY_VAULT_URL=${{ vars.KEY_VAULT_URL }}"
