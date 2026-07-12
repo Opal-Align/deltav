@@ -5,7 +5,8 @@
       "default": "Information",
       "Host.Results": "Information",
       "Function": "Information",
-      "Host.Aggregator": "Information"
+      "Host.Aggregator": "Information",
+      "com.opal.deltav": "Information"
     },
     "console": {
       "isEnabled": true
