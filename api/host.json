@@ -6,6 +6,7 @@
       "Host.Results": "Information",
       "Function": "Information",
       "Host.Aggregator": "Information",
+      "Worker": "Information",
       "com.opal.deltav": "Information"
     },
     "console": {
