@@ -15,7 +15,7 @@ import java.util.logging.Logger;
 
 /**
  * Loads practice metadata from Azure Table Storage into an in-memory cache.
- * Key: Base64 encoded string of "clientId_practiceId" (stored as RowKey in table)
+ * Key: Base64 encoded string of "clientId:practiceId" (stored as RowKey in table)
  * Value: PracticeMetadata POJO
  * <p>
  * Call initialize() from WarmupFunction to load metadata during function startup.
@@ -129,12 +129,15 @@ public class PracticeMetadataLoader {
                 Integer isActiveInt = (Integer) entity.getProperty("is_active");
                 boolean isActive = isActiveInt != null && isActiveInt == 1;
 
+                logger.info("PracticeMetadataLoader: rowKey=" + base64Key + ", practiceId=" + practiceId);
+
                 // Only load active records
                 if (base64Key != null && !base64Key.isBlank() && isActive) {
+                    String trimmedKey = base64Key.trim();
                     PracticeMetadata metadata = new PracticeMetadata(
-                            base64Key, clientId, practiceId, practiceName,
+                            trimmedKey, clientId, practiceId, practiceName,
                             smsFromNumber, logoName, isActive);
-                    map.put(base64Key, metadata);
+                    map.put(trimmedKey, metadata);
                 }
             }
 
