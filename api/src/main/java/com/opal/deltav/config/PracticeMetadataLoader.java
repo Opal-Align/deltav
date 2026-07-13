@@ -77,7 +77,7 @@ public class PracticeMetadataLoader {
      * Check if a key is valid (8 characters and exists in metadata).
      */
     public static boolean isValidKey(String base64Key, Logger logger) {
-        if (base64Key == null || base64Key.length() != 12) return false;
+        if (base64Key == null || base64Key.length() < 8 || base64Key.length() > 14) return false;
         return getMetadataMap(logger).containsKey(base64Key);
     }
 
