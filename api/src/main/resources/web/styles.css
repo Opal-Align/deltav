@@ -31,25 +31,30 @@ body {
 /* ── Layout ── */
 .page {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 1fr;
   min-height: 100vh;
 }
 
-@media (max-width: 860px) {
-  .page { grid-template-columns: 1fr; }
-  .brand-panel { display: none; }
+@media (min-width: 861px) {
+  .page { grid-template-columns: 360px 1fr; }
 }
 
 /* ── Brand panel ── */
 .brand-panel {
   background: linear-gradient(160deg, #0a0a0a 0%, #1a1a1a 50%, #111111 100%);
-  position: sticky;
-  top: 0;
-  height: 100vh;
   display: flex;
   align-items: center;
-  padding: 3rem 2.5rem;
+  padding: 2rem 1.5rem;
   overflow: hidden;
+}
+
+@media (min-width: 861px) {
+  .brand-panel {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    padding: 3rem 2.5rem;
+  }
 }
 
 .brand-panel::before {
