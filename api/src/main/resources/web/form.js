@@ -194,7 +194,8 @@
       btn.className = "cal-cell";
       btn.textContent = day;
 
-      if (cellDate < today || cellDate > maxDate) {
+      var dow = cellDate.getDay();
+      if (cellDate < today || cellDate > maxDate || dow === 0 || dow === 6) {
         btn.disabled = true;
         btn.classList.add("past");
       } else {
