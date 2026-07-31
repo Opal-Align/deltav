@@ -77,6 +77,10 @@ class QueueWorker:
         self.max_retries = int(os.getenv('MAX_RETRIES', '3'))
         self.retry_delay = float(os.getenv('RETRY_DELAY', '1.0'))
 
+        # Connection health check settings (default: 5 minutes)
+        self.health_check_interval = float(os.getenv('DB_HEALTH_CHECK_INTERVAL', '300'))
+        self.last_health_check = time.time()
+
     def connect(self):
         """Establish connections to queue and database."""
         self._connect_queue()
@@ -333,6 +337,20 @@ class QueueWorker:
             logger.info(f"[{self.client_id}] Reconnecting to database...")
             self._connect_db()
 
+    def check_connection_health(self):
+        """Periodically check and refresh database connection to prevent idle timeout."""
+        now = time.time()
+        if now - self.last_health_check >= self.health_check_interval:
+            try:
+                cursor = self.db_connection.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+                logger.debug(f"[{self.client_id}] Connection health check passed")
+            except Exception:
+                logger.info(f"[{self.client_id}] Connection stale, reconnecting...")
+                self._connect_db()
+            self.last_health_check = now
+
     def close(self):
         """Close all connections."""
         if self.db_connection:
@@ -360,6 +378,7 @@ def main():
         while not shutdown.shutdown_requested:
             try:
                 processed = worker.process_batch()
+                worker.check_connection_health()
                 if processed == 0:
                     time.sleep(poll_interval)
             except Exception as e:
