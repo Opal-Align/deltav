@@ -1,0 +1,53 @@
+# Deploy per client - pass CLIENT_ID at deployment time
+# Usage: export CLIENT_ID=client1 && envsubst < deployment.yaml | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sikka-appointment-worker-${CLIENT_ID}
+  labels:
+    app: sikka-appointment-worker
+    client: "${CLIENT_ID}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sikka-appointment-worker
+      client: "${CLIENT_ID}"
+  template:
+    metadata:
+      labels:
+        app: sikka-appointment-worker
+        client: "${CLIENT_ID}"
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: sikka-appointment-worker-sa
+      containers:
+        - name: worker
+          image: ${REGISTRY_URL}/${IMAGE_NAME}:latest
+          env:
+            - name: CLIENT_ID
+              value: "${CLIENT_ID}"
+            # SQL Server (SQL Authentication)
+            - name: SQL_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: sikka-appointment-worker-${CLIENT_ID}-secrets
+                  key: SQL_CONNECTION_STRING
+            # Sikka API credential
+            - name: SIKKA_REQUEST_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sikka-appointment-worker-${CLIENT_ID}-secrets
+                  key: SIKKA_REQUEST_KEY
+          envFrom:
+            - configMapRef:
+                name: sikka-appointment-worker-config
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
