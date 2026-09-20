@@ -10,7 +10,6 @@ authentication for the queue.
 import json
 import logging
 import os
-import signal
 import sys
 import time
 from base64 import b64decode
@@ -26,8 +25,9 @@ except ImportError:
 
 import pyodbc
 import requests
-from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
 from azure.storage.queue import QueueClient
+
+from common import GracefulShutdown, connect_queue, connect_db
 
 # Configure logging
 logging.basicConfig(
@@ -39,19 +39,6 @@ logger = logging.getLogger(__name__)
 
 # Suppress verbose Azure SDK HTTP logs
 logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
-
-
-class GracefulShutdown:
-    """Handle graceful shutdown on SIGTERM/SIGINT."""
-
-    def __init__(self):
-        self.shutdown_requested = False
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGINT, self._handle_signal)
-
-    def _handle_signal(self, signum, frame):
-        logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-        self.shutdown_requested = True
 
 
 class SikkaAppointmentWorker:
@@ -105,63 +92,11 @@ class SikkaAppointmentWorker:
     def _connect_queue(self):
         """Connect to Azure Queue Storage. Prefers Managed Identity, falls back to connection string."""
         queue_name = os.getenv('SIKKA_QUEUE_NAME') or f"{self.client_id}-sikka-appointment-queue"
-
-        # Try Managed Identity first
-        account_url = os.getenv('AZURE_STORAGE_ACCOUNT_URL')
-        if account_url:
-            try:
-                credential = self._get_managed_identity_credential()
-                self.queue_client = QueueClient(
-                    account_url=account_url,
-                    queue_name=queue_name,
-                    credential=credential
-                )
-                # Test connection
-                self.queue_client.get_queue_properties()
-                logger.info(f"[{self.client_id}] Connected to queue via Managed Identity: {queue_name}")
-                return
-            except Exception as e:
-                logger.warning(f"[{self.client_id}] Managed Identity failed, falling back to connection string: {e}")
-
-        # Fallback to connection string
-        connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        if not connection_string:
-            raise ValueError("AZURE_STORAGE_CONNECTION_STRING required (Managed Identity unavailable)")
-
-        self.queue_client = QueueClient.from_connection_string(
-            connection_string,
-            queue_name=queue_name
-        )
-        logger.info(f"[{self.client_id}] Connected to queue via connection string: {queue_name}")
-
-    def _get_managed_identity_credential(self):
-        """Get Managed Identity credential (User-assigned or System-assigned)."""
-        managed_identity_client_id = os.getenv('AZURE_CLIENT_ID')
-        if managed_identity_client_id:
-            logger.info(f"[{self.client_id}] Using User Managed Identity: {managed_identity_client_id}")
-            return ManagedIdentityCredential(client_id=managed_identity_client_id)
-        else:
-            logger.info(f"[{self.client_id}] Using System Managed Identity")
-            return DefaultAzureCredential()
+        self.queue_client = connect_queue(self.client_id, queue_name)
 
     def _connect_db(self):
         """Connect to SQL Server with retry logic."""
-        connection_string = os.getenv('SQL_CONNECTION_STRING')
-        if not connection_string:
-            raise ValueError("SQL_CONNECTION_STRING environment variable is required")
-
-        for attempt in range(self.max_retries):
-            try:
-                self.db_connection = pyodbc.connect(connection_string, timeout=30)
-                self.db_connection.autocommit = False
-                logger.info(f"[{self.client_id}] Connected to SQL Server")
-                return
-            except pyodbc.Error as e:
-                logger.warning(f"[{self.client_id}] DB connection attempt {attempt + 1} failed: {e}")
-                if attempt < self.max_retries - 1:
-                    time.sleep(self.retry_delay * (attempt + 1))
-                else:
-                    raise
+        self.db_connection = connect_db(self.client_id, self.max_retries, self.retry_delay)
 
     def process_batch(self) -> int:
         """Process a batch of appointment messages. Returns count of appointments created."""

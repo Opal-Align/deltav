@@ -28,6 +28,9 @@ envsubst < k8s/secret.yaml | kubectl apply -f -
 # Apply per-client deployment
 envsubst < k8s/deployment.yaml | kubectl apply -f -
 
+# Apply per-client writeback-status deployment
+envsubst < k8s/deployment-writeback-status.yaml | kubectl apply -f -
+
 echo ""
-echo "Deployed sikka-appointment-worker-$CLIENT_ID"
+echo "Deployed sikka-appointment-worker-$CLIENT_ID and sikka-writeback-status-worker-$CLIENT_ID"
 kubectl get pods -l client=$CLIENT_ID
