@@ -136,6 +136,8 @@ class SikkaAppointmentWorker:
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     continue
 
+                logger.info(f"[{self.client_id}] Message {msg.id} read: {json.dumps(data)}")
+
                 missing_fields = self._validate_message(data)
                 if missing_fields:
                     logger.error(
