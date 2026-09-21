@@ -20,7 +20,7 @@ spec:
         client: "${CLIENT_ID}"
         azure.workload.identity/use: "true"
     spec:
-      serviceAccountName: sikka-appointment-worker-sa
+      serviceAccountName: queue-worker-sa
       containers:
         - name: worker
           image: ${REGISTRY_URL}/${IMAGE_NAME}:latest
