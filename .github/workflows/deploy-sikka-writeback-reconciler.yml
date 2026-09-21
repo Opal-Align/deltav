@@ -1,8 +1,8 @@
-name: Deploy Sikka Appointment Worker
+name: Deploy Sikka Writeback Status Reconciler
 
 run-name: >-
-  Deploy Sikka Worker · ${{ github.event.inputs.process }} ·
-  ${{ github.event.inputs.environment }} · ${{ github.event.inputs.client_id }}
+  Deploy Sikka Writeback Status Reconciler · ${{ github.event.inputs.environment }} ·
+  ${{ github.event.inputs.client_id }}
 
 permissions:
   id-token: write
@@ -27,15 +27,6 @@ on:
         options:
           - dev
           - main
-      process:
-        description: 'Which process to deploy'
-        required: true
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - appointment-worker
-          - writeback-status-worker
       client_id:
         description: 'Client ID for the Sikka worker'
         required: true
@@ -49,19 +40,10 @@ on:
         required: false
         default: 'latest'
         type: string
-      rollout_deployment:
-        description: 'Trigger rollout of deployments'
-        required: false
-        default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
 
 env:
   NAMESPACE: ${{ github.event.inputs.namespace }}
   ENVIRONMENT: ${{ github.event.inputs.environment }}
-  PROCESS: ${{ github.event.inputs.process }}
   MODULE_DIR: sikka-appointment-worker-python
   IMAGE_TAG: ${{ github.event.inputs.image_tag }}
   IMAGE_NAME: sikka-appointment-worker-python-${{ github.event.inputs.environment }}
@@ -69,7 +51,7 @@ env:
 
 jobs:
   deploy:
-    name: Deploy ${{ github.event.inputs.process }} (${{ github.event.inputs.environment }})
+    name: Deploy Writeback Status Reconciler (${{ github.event.inputs.environment }})
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
@@ -81,7 +63,6 @@ jobs:
         run: |
           echo "Environment: ${{ env.ENVIRONMENT }}"
           echo "Namespace: ${{ env.NAMESPACE }}"
-          echo "Process: ${{ env.PROCESS }}"
           echo "Client ID: ${{ github.event.inputs.client_id }}"
           echo "SQL Database: ${{ github.event.inputs.sql_database }}"
           echo "Registry: ${{ env.IMAGE_REGISTRY }}"
@@ -124,28 +105,10 @@ jobs:
           export SIKKA_APP_KEY=${{ secrets.SIKKA_APP_KEY }}
           envsubst < secret-${{ env.ENVIRONMENT }}.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
 
-      - name: Deploy Appointment Worker
-        if: ${{ github.event.inputs.process == 'appointment-worker' || github.event.inputs.process == 'all' }}
+      - name: Deploy Writeback Status Reconciler CronJob
         working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
           export CLIENT_ID=${{ github.event.inputs.client_id }}
           export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
           export IMAGE_NAME=${{ env.IMAGE_NAME }}
-          envsubst < deployment.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
-
-      - name: Deploy Writeback Status Worker
-        if: ${{ github.event.inputs.process == 'writeback-status-worker' || github.event.inputs.process == 'all' }}
-        working-directory: ${{ env.MODULE_DIR }}/k8s
-        run: |
-          export CLIENT_ID=${{ github.event.inputs.client_id }}
-          export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
-          export IMAGE_NAME=${{ env.IMAGE_NAME }}
-          envsubst < deployment-writeback-status.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
-
-      - name: Restart Appointment Worker
-        if: ${{ github.event.inputs.rollout_deployment == 'true' && (github.event.inputs.process == 'appointment-worker' || github.event.inputs.process == 'all') }}
-        run: kubectl rollout restart deployment/sikka-appointment-worker-${{ github.event.inputs.client_id }} -n ${{ env.NAMESPACE }}
-
-      - name: Restart Writeback Status Worker
-        if: ${{ github.event.inputs.rollout_deployment == 'true' && (github.event.inputs.process == 'writeback-status-worker' || github.event.inputs.process == 'all') }}
-        run: kubectl rollout restart deployment/sikka-writeback-status-worker-${{ github.event.inputs.client_id }} -n ${{ env.NAMESPACE }}
+          envsubst < cronjob-writeback-status-reconciler.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -

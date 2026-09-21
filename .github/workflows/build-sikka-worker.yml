@@ -1,5 +1,9 @@
 name: Build & Push Sikka Appointment Worker
 
+run-name: >-
+  Build Sikka Worker · ${{ github.event.inputs.environment }} ·
+  ${{ github.event.inputs.image_tag }}
+
 permissions:
   id-token: write
   contents: read
@@ -29,6 +33,7 @@ env:
 
 jobs:
   build-and-push:
+    name: Build & Push (${{ github.event.inputs.environment }})
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
