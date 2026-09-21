@@ -57,7 +57,7 @@ class SikkaAppointmentWorker:
     """
 
     # Fields required to build a valid Sikka appointment request
-    REQUIRED_FIELDS = ('patientId', 'practiceId', 'date', 'time')
+    REQUIRED_FIELDS = ('patient_id', 'practice_id', 'date', 'time')
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -213,31 +213,31 @@ class SikkaAppointmentWorker:
     def _build_payload(self, data: dict) -> dict:
         """Map queue message fields to the Sikka POST /v4/appointment request body."""
         return {
-            'patient_id': str(data.get('patientId', '')),
+            'patient_id': str(data.get('patient_id', '')),
             'date': data.get('date', ''),
             'description': data.get('description', ''),
             'time': data.get('time', ''),
-            'provider_id': data.get('providerId', ''),
+            'provider_id': data.get('provider_id', ''),
             'length': str(data.get('length', '')),
             'operatory': data.get('operatory', ''),
-            'practice_id': "1",
+            'practice_id': str(data.get('practice_id', '')),
             'type': data.get('type', ''),
             'user': data.get('user', ''),
             'status': data.get('status', ''),
             'note': data.get('note', ''),
-            'procedure_code': data.get('procedureCode', ''),
+            'procedure_code': data.get('procedure_code', ''),
             'amount': data.get('amount', ''),
             'tooth': data.get('tooth', ''),
             'surface': data.get('surface', ''),
             'root': data.get('root', ''),
             'quadrant': data.get('quadrant', ''),
-            'is_guarantor_exist': data.get('isGuarantorExist', ''),
+            'is_guarantor_exist': data.get('is_guarantor_exist', ''),
             'gender': data.get('gender', ''),
-            'workphone': data.get('workPhone', ''),
+            'workphone': data.get('workphone', ''),
             'cell': data.get('cell', ''),
-            'other_phone': data.get('otherPhone', ''),
-            'address_line1': data.get('addressLine1', ''),
-            'address_line2': data.get('addressLine2', ''),
+            'other_phone': data.get('other_phone', ''),
+            'address_line1': data.get('address_line1', ''),
+            'address_line2': data.get('address_line2', ''),
             'city': data.get('city', ''),
             'state': data.get('state', ''),
             'zipcode': data.get('zipcode', ''),
@@ -305,9 +305,9 @@ class SikkaAppointmentWorker:
         if not data:
             return
 
-        patient_key = data.get('patientKey')
-        practice_id = data.get('practiceId')
-        request_id = data.get('requestId')
+        patient_key = data.get('patient_key')
+        practice_id = data.get('practice_id')
+        request_id = data.get('request_id')
         if not (patient_key and practice_id) and not request_id:
             return
 
