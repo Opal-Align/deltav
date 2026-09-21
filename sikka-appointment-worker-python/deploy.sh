@@ -31,6 +31,9 @@ envsubst < k8s/deployment.yaml | kubectl apply -f -
 # Apply per-client writeback-status deployment
 envsubst < k8s/deployment-writeback-status.yaml | kubectl apply -f -
 
+# Apply per-client writeback-status reconciler cronjob
+envsubst < k8s/cronjob-writeback-status-reconciler.yaml | kubectl apply -f -
+
 echo ""
-echo "Deployed sikka-appointment-worker-$CLIENT_ID and sikka-writeback-status-worker-$CLIENT_ID"
+echo "Deployed sikka-appointment-worker-$CLIENT_ID, sikka-writeback-status-worker-$CLIENT_ID, and sikka-writeback-status-reconciler-$CLIENT_ID"
 kubectl get pods -l client=$CLIENT_ID

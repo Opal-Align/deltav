@@ -35,17 +35,29 @@ public class QueueStoragePublisher implements MessagePublisher {
 
         String queueName = clientId + QUEUE_NAME_SUFFIX;
         String jsonMessage = gson.toJson(message);
+        sendWithRetry(queueName, jsonMessage, "registration (patientKey=" + message.getPatientKey() + ")", logger);
+    }
+
+    @Override
+    public void publishRaw(String queueName, String jsonPayload, Logger logger) throws StreamingException {
+        if (queueName == null || queueName.isBlank()) {
+            throw new StreamingException("Queue name is required for raw publish");
+        }
+        sendWithRetry(queueName, jsonPayload, "raw message", logger);
+    }
+
+    private void sendWithRetry(String queueName, String jsonPayload, String description, Logger logger) throws StreamingException {
         String encodedMessage = Base64.getEncoder().encodeToString(
-                jsonMessage.getBytes(StandardCharsets.UTF_8));
+                jsonPayload.getBytes(StandardCharsets.UTF_8));
 
         // Retry once if connection is stale
         for (int attempt = 1; attempt <= 2; attempt++) {
             try {
                 QueueClient client = getQueueClient(queueName, logger);
 
-                logger.info("Publishing registration to queue '" + queueName + "': patientKey=" + message.getPatientKey());
+                logger.info("Publishing " + description + " to queue '" + queueName + "'");
                 client.sendMessage(encodedMessage);
-                logger.info("Registration published successfully to queue '" + queueName + "': patientKey=" + message.getPatientKey());
+                logger.info("Published " + description + " successfully to queue '" + queueName + "'");
                 return;
 
             } catch (Exception e) {

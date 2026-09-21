@@ -1,0 +1,55 @@
+# Deploy per client - pass CLIENT_ID at deployment time
+# Usage: export CLIENT_ID=client1 && envsubst < cronjob-writeback-status-reconciler.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sikka-writeback-status-reconciler-${CLIENT_ID}
+  labels:
+    app: sikka-writeback-status-reconciler
+    client: "${CLIENT_ID}"
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 240
+      template:
+        metadata:
+          labels:
+            app: sikka-writeback-status-reconciler
+            client: "${CLIENT_ID}"
+            azure.workload.identity/use: "true"
+        spec:
+          serviceAccountName: sikka-appointment-worker-sa
+          restartPolicy: Never
+          containers:
+            - name: reconciler
+              image: ${REGISTRY_URL}/${IMAGE_NAME}:latest
+              command: ["python", "writeback_status_reconciler.py"]
+              env:
+                - name: CLIENT_ID
+                  value: "${CLIENT_ID}"
+                # SQL Server (SQL Authentication)
+                - name: SQL_CONNECTION_STRING
+                  valueFrom:
+                    secretKeyRef:
+                      name: sikka-appointment-worker-${CLIENT_ID}-secrets
+                      key: SQL_CONNECTION_STRING
+                # Sikka API credential
+                - name: SIKKA_REQUEST_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: sikka-appointment-worker-${CLIENT_ID}-secrets
+                      key: SIKKA_REQUEST_KEY
+              envFrom:
+                - configMapRef:
+                    name: sikka-appointment-worker-config
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "128Mi"
+                  cpu: "200m"

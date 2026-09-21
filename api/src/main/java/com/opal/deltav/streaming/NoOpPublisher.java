@@ -15,6 +15,11 @@ public class NoOpPublisher implements MessagePublisher {
     }
 
     @Override
+    public void publishRaw(String queueName, String jsonPayload, Logger logger) {
+        logger.fine("Streaming disabled, skipping raw publish to queue: " + queueName);
+    }
+
+    @Override
     public StreamingType getType() {
         return StreamingType.NONE;
     }
