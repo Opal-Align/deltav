@@ -27,7 +27,7 @@ import pyodbc
 import requests
 from azure.storage.queue import QueueClient
 
-from common import GracefulShutdown, connect_queue, connect_db
+from common import GracefulShutdown, connect_queue, connect_db, SikkaTokenManager
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +63,7 @@ class SikkaAppointmentWorker:
         self.client_id = os.getenv('CLIENT_ID', 'default')
         self.queue_client: Optional[QueueClient] = None
         self.db_connection: Optional[pyodbc.Connection] = None
+        self.token_manager: Optional[SikkaTokenManager] = None
 
         # Queue configuration
         self.batch_size = int(os.getenv('BATCH_SIZE', '16'))
@@ -75,7 +76,6 @@ class SikkaAppointmentWorker:
 
         # Sikka API configuration
         self.sikka_api_url = os.getenv('SIKKA_API_URL', 'https://api.sikkasoft.com/v4/appointment')
-        self.sikka_request_key = os.getenv('SIKKA_REQUEST_KEY')
         self.http_timeout = float(os.getenv('SIKKA_HTTP_TIMEOUT', '15'))
 
         # Connection health check settings (default: 5 minutes)
@@ -83,9 +83,14 @@ class SikkaAppointmentWorker:
         self.last_health_check = time.time()
 
     def connect(self):
-        """Establish connections to queue and database."""
-        if not self.sikka_request_key:
-            raise ValueError("SIKKA_REQUEST_KEY environment variable is required")
+        """Establish connections to queue and database, and the per-practice token manager."""
+        self.token_manager = SikkaTokenManager(
+            app_id=os.getenv('SIKKA_APP_ID'),
+            app_key=os.getenv('SIKKA_APP_KEY'),
+            max_retries=self.max_retries,
+            retry_delay=self.retry_delay,
+            http_timeout=self.http_timeout,
+        )
         self._connect_queue()
         self._connect_db()
 
@@ -141,8 +146,25 @@ class SikkaAppointmentWorker:
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     continue
 
+                office_id = data.get('officeId') or data.get('office_id')
+                if not office_id:
+                    logger.error(
+                        f"[{self.client_id}] Missing office_id in message, deleting: {msg.id}"
+                    )
+                    self._record_outcome(data, success=False)
+                    self.queue_client.delete_message(msg.id, msg.pop_receipt)
+                    continue
+
+                try:
+                    request_key = self.token_manager.get_request_key(office_id)
+                except RuntimeError as e:
+                    logger.error(f"[{self.client_id}] Could not obtain Sikka request_key for message {msg.id}: {e}")
+                    self._record_outcome(data, success=False)
+                    # Leave message in queue; retried until max_dequeue_count is hit.
+                    continue
+
                 payload = self._build_payload(data)
-                success, result = self._call_sikka(payload)
+                success, result = self._call_sikka(payload, request_key)
                 self._record_outcome(data, success=success, detail=result)
 
                 if success:
@@ -196,7 +218,7 @@ class SikkaAppointmentWorker:
             'provider_id': data.get('providerId', ''),
             'length': str(data.get('length', '')),
             'operatory': data.get('operatory', ''),
-            'practice_id': str(data.get('practiceId', '')),
+            'practice_id': "1",
             'type': data.get('type', ''),
             'user': data.get('user', ''),
             'status': data.get('status', ''),
@@ -219,11 +241,11 @@ class SikkaAppointmentWorker:
             'zipcode': data.get('zipcode', ''),
         }
 
-    def _call_sikka(self, payload: dict) -> tuple:
+    def _call_sikka(self, payload: dict, request_key: str) -> tuple:
         """POST the appointment to Sikka with retry. Returns (success, response body or error message)."""
         headers = {
             'Content-Type': 'application/json',
-            'Request-Key': self.sikka_request_key,
+            'Request-Key': request_key,
         }
 
         for attempt in range(self.max_retries):

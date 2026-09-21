@@ -1,4 +1,4 @@
-# Deploy per client - pass CLIENT_ID at deployment time
+  # Deploy per client - pass CLIENT_ID at deployment time
 # Usage: export CLIENT_ID=client1 && envsubst < deployment.yaml | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -33,12 +33,17 @@ spec:
                 secretKeyRef:
                   name: sikka-appointment-worker-${CLIENT_ID}-secrets
                   key: SQL_CONNECTION_STRING
-            # Sikka API credential
-            - name: SIKKA_REQUEST_KEY
+            # Sikka app credentials (used to generate/refresh a per-practice request_key at runtime)
+            - name: SIKKA_APP_ID
               valueFrom:
                 secretKeyRef:
                   name: sikka-appointment-worker-${CLIENT_ID}-secrets
-                  key: SIKKA_REQUEST_KEY
+                  key: SIKKA_APP_ID
+            - name: SIKKA_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sikka-appointment-worker-${CLIENT_ID}-secrets
+                  key: SIKKA_APP_KEY
           envFrom:
             - configMapRef:
                 name: sikka-appointment-worker-config

@@ -1,0 +1,139 @@
+name: Deploy Sikka Appointment Worker
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        type: choice
+        options:
+          - marquee-test
+          - marquee
+          - default
+      environment:
+        description: 'Environment (dev/main)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - main
+      client_id:
+        description: 'Client ID for the Sikka worker'
+        required: true
+        type: string
+      sql_database:
+        description: 'SQL Database name'
+        required: true
+        type: string
+      image_tag:
+        description: 'Image tag to deploy (must already exist in the registry)'
+        required: false
+        default: 'latest'
+        type: string
+      rollout_deployment:
+        description: 'Trigger rollout of deployments'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  NAMESPACE: ${{ github.event.inputs.namespace }}
+  ENVIRONMENT: ${{ github.event.inputs.environment }}
+  MODULE_DIR: sikka-appointment-worker-python
+  IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+  IMAGE_NAME: sikka-appointment-worker-python-${{ github.event.inputs.environment }}
+  IMAGE_REGISTRY: ${{ vars.IMAGE_REGISTRY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Print Deploy Info
+        run: |
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Namespace: ${{ github.event.inputs.namespace }}"
+          echo "Client ID: ${{ github.event.inputs.client_id }}"
+          echo "SQL Database: ${{ github.event.inputs.sql_database }}"
+          echo "Registry: ${{ env.IMAGE_REGISTRY }}"
+          echo "Image Name: ${{ env.IMAGE_NAME }}"
+          echo "Image Tag: ${{ env.IMAGE_TAG }}"
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
+          tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
+          client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
+          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
+
+      - name: Set AKS Context
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RG_NAME }}
+          cluster-name: ${{ vars.AKS_CLUSTER_NAME }}
+
+      - name: Deploy Service Account
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          kubectl apply -f service-account-${{ env.ENVIRONMENT }}.yaml -n ${{ env.NAMESPACE }}
+
+      - name: Deploy ConfigMap
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          kubectl apply -f configmap-${{ env.ENVIRONMENT }}.yaml -n ${{ env.NAMESPACE }}
+
+      - name: Deploy Secret
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export SQL_SERVER=${{ vars.SQL_SERVER }}
+          export SQL_DATABASE=${{ github.event.inputs.sql_database }}
+          export SQL_USER=${{ secrets.SQL_USER }}
+          export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+          export SIKKA_APP_ID=${{ vars.SIKKA_APP_ID }}
+          export SIKKA_APP_KEY=${{ secrets.SIKKA_APP_KEY }}
+          envsubst < secret-${{ env.ENVIRONMENT }}.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
+
+      - name: Deploy Appointment Worker
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          envsubst < deployment.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
+
+      - name: Deploy Writeback Status Worker
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          envsubst < deployment-writeback-status.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
+
+      - name: Deploy Writeback Status Reconciler CronJob
+        working-directory: ${{ env.MODULE_DIR }}/k8s
+        run: |
+          export CLIENT_ID=${{ github.event.inputs.client_id }}
+          export REGISTRY_URL=${{ env.IMAGE_REGISTRY }}
+          export IMAGE_NAME=${{ env.IMAGE_NAME }}
+          envsubst < cronjob-writeback-status-reconciler.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
+
+      - name: Restart Deployments in AKS
+        if: ${{ github.event.inputs.rollout_deployment == 'true' }}
+        run: |
+          kubectl rollout restart deployment/sikka-appointment-worker-${{ github.event.inputs.client_id }} -n ${{ env.NAMESPACE }}
+          kubectl rollout restart deployment/sikka-writeback-status-worker-${{ github.event.inputs.client_id }} -n ${{ env.NAMESPACE }}

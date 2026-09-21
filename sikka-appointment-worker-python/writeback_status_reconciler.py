@@ -27,7 +27,7 @@ except ImportError:
 import pyodbc
 import requests
 
-from common import connect_db
+from common import connect_db, SikkaTokenManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,7 +41,7 @@ class WritebackStatusReconciler:
     """Reconciles pending writeback_status_id rows against Sikka's writeback_status API."""
 
     SELECT_PENDING_SQL = """
-        SELECT TOP (?) id, writeback_status_id
+        SELECT TOP (?) id, writeback_status_id, sikka_office_id
         FROM trace_appt_writeback_requests
         WHERE writeback_status_id IS NOT NULL AND (status IS NULL OR status = '')
         ORDER BY created_dt ASC
@@ -62,6 +62,7 @@ class WritebackStatusReconciler:
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
         self.db_connection: Optional[pyodbc.Connection] = None
+        self.token_manager: Optional[SikkaTokenManager] = None
 
         self.batch_size = int(os.getenv('WRITEBACK_RECONCILE_BATCH_SIZE', '100'))
         self.max_retries = int(os.getenv('MAX_RETRIES', '3'))
@@ -70,12 +71,16 @@ class WritebackStatusReconciler:
         self.sikka_api_url = os.getenv(
             'SIKKA_WRITEBACK_STATUS_API_URL', 'https://api.sikkasoft.com/v4/writeback_status'
         )
-        self.sikka_request_key = os.getenv('SIKKA_REQUEST_KEY')
         self.http_timeout = float(os.getenv('SIKKA_HTTP_TIMEOUT', '15'))
 
     def connect(self):
-        if not self.sikka_request_key:
-            raise ValueError("SIKKA_REQUEST_KEY environment variable is required")
+        self.token_manager = SikkaTokenManager(
+            app_id=os.getenv('SIKKA_APP_ID'),
+            app_key=os.getenv('SIKKA_APP_KEY'),
+            max_retries=self.max_retries,
+            retry_delay=self.retry_delay,
+            http_timeout=self.http_timeout,
+        )
         self.db_connection = connect_db(self.client_id, self.max_retries, self.retry_delay)
 
     def run(self) -> int:
@@ -87,9 +92,15 @@ class WritebackStatusReconciler:
                 break
 
             logger.info(f"[{self.client_id}] Reconciling {len(pending)} pending writeback status(es)")
-            for row_id, writeback_status_id in pending:
+            for row_id, writeback_status_id, office_id in pending:
                 try:
-                    if self._reconcile_one(row_id, writeback_status_id):
+                    if not office_id:
+                        logger.error(
+                            f"[{self.client_id}] Row {row_id} has no sikka_office_id, cannot look up "
+                            f"writeback_status_id {writeback_status_id}, skipping"
+                        )
+                        continue
+                    if self._reconcile_one(row_id, writeback_status_id, office_id):
                         resolved_count += 1
                 except Exception as e:
                     logger.error(
@@ -105,19 +116,25 @@ class WritebackStatusReconciler:
 
         return resolved_count
 
-    def _reconcile_one(self, row_id, writeback_status_id) -> bool:
-        item = self._fetch_writeback_status(writeback_status_id)
+    def _reconcile_one(self, row_id, writeback_status_id, office_id) -> bool:
+        try:
+            request_key = self.token_manager.get_request_key(office_id)
+        except RuntimeError as e:
+            logger.error(f"[{self.client_id}] Could not obtain Sikka request_key for office {office_id}: {e}")
+            return False
+
+        item = self._fetch_writeback_status(writeback_status_id, request_key)
         if item is None:
             return False  # not found / not yet completed - retry next run
         return self._apply_result(row_id, item)
 
     def _fetch_pending(self) -> list:
-        """Fetch (id, writeback_status_id) pairs still awaiting a resolved status."""
+        """Fetch (id, writeback_status_id, sikka_office_id) rows still awaiting a resolved status."""
         for attempt in range(self.max_retries):
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute(self.SELECT_PENDING_SQL, (self.batch_size,))
-                rows = [(row[0], row[1]) for row in cursor.fetchall()]
+                rows = [(row[0], row[1], row[2]) for row in cursor.fetchall()]
                 cursor.close()
                 return rows
             except pyodbc.Error as e:
@@ -130,9 +147,9 @@ class WritebackStatusReconciler:
                     return []
         return []
 
-    def _fetch_writeback_status(self, writeback_status_id) -> Optional[dict]:
+    def _fetch_writeback_status(self, writeback_status_id, request_key: str) -> Optional[dict]:
         """GET /v4/writeback_status?id=<id> and return the matching item, or None if not resolvable yet."""
-        headers = {'Request-Key': self.sikka_request_key}
+        headers = {'Request-Key': request_key}
         params = {'id': writeback_status_id}
 
         for attempt in range(self.max_retries):

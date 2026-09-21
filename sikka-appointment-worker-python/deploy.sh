@@ -13,7 +13,8 @@ set -e
 : "${SQL_DATABASE:?Set SQL_DATABASE}"
 : "${SQL_USER:?Set SQL_USER}"
 : "${SQL_PASSWORD:?Set SQL_PASSWORD}"
-: "${SIKKA_REQUEST_KEY:?Set SIKKA_REQUEST_KEY}"
+: "${SIKKA_APP_ID:?Set SIKKA_APP_ID}"
+: "${SIKKA_APP_KEY:?Set SIKKA_APP_KEY}"
 
 echo "Deploying Sikka appointment worker for client: $CLIENT_ID"
 echo "  Storage: $STORAGE_ACCOUNT"
