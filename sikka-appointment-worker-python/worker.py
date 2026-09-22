@@ -52,7 +52,7 @@ class SikkaAppointmentWorker:
 
     UPDATE_WRITEBACK_SQL = """
         UPDATE trace_appt_writeback_requests
-        SET status = ?, writeback_status_id = ?, updated_dt = ?
+        SET status = ?, writeback_status_id = ?, writeback_status_message = ?, updated_dt = ?
         WHERE id = ?
     """
 
@@ -304,6 +304,14 @@ class SikkaAppointmentWorker:
                 return None
         return None
 
+    def _extract_message(self, detail) -> Optional[str]:
+        """Pull a human-readable message out of a Sikka response for storage/logging."""
+        if isinstance(detail, dict):
+            return detail.get('result') or detail.get('long_message')
+        if detail:
+            return str(detail)
+        return None
+
     def _record_outcome(self, data: Optional[dict], success: bool, detail=None):
         """Write the outcome of the Sikka call back to SQL Server."""
         if not data:
@@ -317,6 +325,7 @@ class SikkaAppointmentWorker:
 
         status = 'PENDING' if success else 'FAILED'
         writeback_status_id = self._extract_writeback_status_id(detail) if success else None
+        message = self._extract_message(detail)
         updated_dt = datetime.utcnow()
 
         for attempt in range(self.max_retries):
@@ -325,7 +334,9 @@ class SikkaAppointmentWorker:
                 if patient_key and practice_id:
                     cursor.execute(self.UPDATE_SQL, (status, updated_dt, patient_key, practice_id))
                 if request_id:
-                    cursor.execute(self.UPDATE_WRITEBACK_SQL, (status, writeback_status_id, updated_dt, request_id))
+                    cursor.execute(
+                        self.UPDATE_WRITEBACK_SQL, (status, writeback_status_id, message, updated_dt, request_id)
+                    )
                 self.db_connection.commit()
                 cursor.close()
                 return

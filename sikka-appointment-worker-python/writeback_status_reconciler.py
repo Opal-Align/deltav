@@ -50,13 +50,13 @@ class WritebackStatusReconciler:
 
     UPDATE_SUCCESS_SQL = """
         UPDATE trace_appt_writeback_requests
-        SET status = ?, appointment_sr_no = ?, updated_dt = ?
+        SET status = ?, appointment_sr_no = ?, writeback_status_message = ?, updated_dt = ?
         WHERE id = ?
     """
 
     UPDATE_FAILED_SQL = """
         UPDATE trace_appt_writeback_requests
-        SET status = ?, updated_dt = ?
+        SET status = ?, writeback_status_message = ?, updated_dt = ?
         WHERE id = ?
     """
 
@@ -197,21 +197,27 @@ class WritebackStatusReconciler:
     def _apply_result(self, row_id, item: dict) -> bool:
         """Apply a resolved writeback_status item to its trace_appt_writeback_requests row."""
         status = (item.get('status') or '').strip()
-        is_completed = str(item.get('is_completed', '1')) in ('1', 'true', 'True')
-
-        if not is_completed:
-            return False  # still in progress on the PMS side - retry next run
-
+        message = item.get('result') or None
         updated_dt = datetime.utcnow()
 
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None
             return self._execute_update(
-                self.UPDATE_SUCCESS_SQL, ('SCHEDULED', appointment_sr_no, updated_dt, row_id)
+                self.UPDATE_SUCCESS_SQL, ('SCHEDULED', appointment_sr_no, message, updated_dt, row_id)
             )
 
-        logger.error(f"[{self.client_id}] Writeback failed for row {row_id}: {item}")
-        return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', updated_dt, row_id))
+        if status.lower() == 'failed':
+            result_message = (item.get('result') or '').lower()
+            if 'appointment already scheduled' in result_message:
+                logger.info(
+                    f"[{self.client_id}] Writeback needs reschedule for row {row_id}: {item.get('result')}"
+                )
+                return self._execute_update(self.UPDATE_FAILED_SQL, ('RESCHEDULE', message, updated_dt, row_id))
+
+            logger.error(f"[{self.client_id}] Writeback failed for row {row_id}: {item}")
+            return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, row_id))
+
+        return False  # not yet a terminal status - retry next run
 
     def _execute_update(self, sql: str, params: tuple) -> bool:
         logger.info(f"[{self.client_id}] Update query: {' '.join(sql.split())} | params={params}")
