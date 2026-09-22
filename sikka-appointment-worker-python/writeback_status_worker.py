@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Azure Queue to SQL Server Writeback-Status Worker
-Reads Sikka /v4/writeback_status notifications from an Azure Storage Queue —
-pushed by another process once the PMS confirms an appointment write-back —
-and updates trace_appt_writeback_requests with the resulting appointment_sr_no
-and status, matched by writeback_status_id.
+Reads a Sikka /v4/writeback_status notification (one flat JSON object per
+message) from an Azure Storage Queue - pushed by another process once the
+PMS confirms an appointment write-back - and updates
+trace_appt_writeback_requests accordingly, matched by writeback_status_id.
 """
 
 import json
@@ -39,11 +39,17 @@ logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(l
 
 
 class WritebackStatusWorker:
-    """Worker that applies Sikka writeback_status notifications to trace_appt_writeback_requests."""
+    """Worker that applies a Sikka writeback_status notification to trace_appt_writeback_requests."""
 
-    UPDATE_SQL = """
+    UPDATE_SUCCESS_SQL = """
         UPDATE trace_appt_writeback_requests
-        SET status = ?, appointment_sr_no = ?, updated_dt = ?
+        SET status = ?, appointment_sr_no = ?, writeback_status_message = ?, updated_dt = ?
+        WHERE writeback_status_id = ?
+    """
+
+    UPDATE_FAILED_SQL = """
+        UPDATE trace_appt_writeback_requests
+        SET status = ?, writeback_status_message = ?, updated_dt = ?
         WHERE writeback_status_id = ?
     """
 
@@ -100,27 +106,21 @@ class WritebackStatusWorker:
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     continue
 
-                items = self._parse_message(msg.content)
-                if not items:
+                item = self._parse_message(msg.content)
+                if not item:
                     logger.error(f"[{self.client_id}] Failed to parse message content, deleting: {msg.id}")
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     continue
 
-                # Evaluate every item (no short-circuit) so a bad item doesn't
-                # block the rest of the batch from being applied.
-                results = [self._apply_item(item) for item in items]
+                logger.info(f"[{self.client_id}] Writeback status message {msg.id} read: {json.dumps(item)}")
 
-                if all(results):
+                if self._apply_item(item):
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
-                    updated_count += len(items)
+                    updated_count += 1
                 else:
-                    logger.error(
-                        f"[{self.client_id}] Failed to apply one or more writeback statuses "
-                        f"for message {msg.id}"
-                    )
+                    logger.error(f"[{self.client_id}] Failed to apply writeback status for message {msg.id}")
                     # Leave message in queue; it becomes visible again after the
                     # visibility timeout and is retried until max_dequeue_count is hit.
-                    # Re-applying already-succeeded items on retry is safe (idempotent UPDATE).
 
             except Exception as e:
                 logger.error(f"[{self.client_id}] Failed to process message {msg.id}: {e}")
@@ -130,17 +130,13 @@ class WritebackStatusWorker:
 
         return updated_count
 
-    def _parse_message(self, content: str) -> Optional[list]:
-        """Parse message content into a list of writeback_status items.
-
-        Accepts a single item object, a bare list of items, or a full
-        paginated /v4/writeback_status response (an object with "items").
-        """
+    def _parse_message(self, content: str) -> Optional[dict]:
+        """Parse message content into a single writeback_status item object."""
         if not content:
             return None
 
         text = content
-        if not content.startswith('{') and not content.startswith('['):
+        if not content.startswith('{'):
             try:
                 text = b64decode(content).decode('utf-8')
             except Exception:
@@ -151,13 +147,7 @@ class WritebackStatusWorker:
         except Exception:
             return None
 
-        if isinstance(parsed, dict) and 'items' in parsed:
-            return parsed['items']
-        if isinstance(parsed, list):
-            return parsed
-        if isinstance(parsed, dict):
-            return [parsed]
-        return None
+        return parsed if isinstance(parsed, dict) else None
 
     def _apply_item(self, item: dict) -> bool:
         """Update trace_appt_writeback_requests for a single writeback_status item."""
@@ -172,14 +162,35 @@ class WritebackStatusWorker:
             logger.error(f"[{self.client_id}] Invalid writeback_status id, skipping: {item}")
             return False
 
-        status = item['status']
-        appointment_sr_no = item.get('appointment_sr_no') or None
+        status = (item.get('status') or '').strip()
+        message = item.get('result') or None
         updated_dt = datetime.utcnow()
 
+        if status.lower() == 'success':
+            appointment_sr_no = item.get('appointment_sr_no') or None
+            return self._execute_update(
+                self.UPDATE_SUCCESS_SQL,
+                ('SCHEDULED', appointment_sr_no, message, updated_dt, writeback_status_id)
+            )
+
+        result_message = (item.get('result') or '').lower()
+        if 'appointment already scheduled' in result_message:
+            logger.info(
+                f"[{self.client_id}] Writeback needs reschedule for writeback_status_id "
+                f"{writeback_status_id}: {item.get('result')}"
+            )
+            return self._execute_update(
+                self.UPDATE_FAILED_SQL, ('RESCHEDULE', message, updated_dt, writeback_status_id)
+            )
+
+        logger.error(f"[{self.client_id}] Writeback failed for writeback_status_id {writeback_status_id}: {item}")
+        return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, writeback_status_id))
+
+    def _execute_update(self, sql: str, params: tuple) -> bool:
         for attempt in range(self.max_retries):
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute(self.UPDATE_SQL, (status, appointment_sr_no, updated_dt, writeback_status_id))
+                cursor.execute(sql, params)
                 self.db_connection.commit()
                 cursor.close()
                 return True
@@ -190,11 +201,8 @@ class WritebackStatusWorker:
                     time.sleep(self.retry_delay * (attempt + 1))
                     self._reconnect_if_needed()
                 else:
-                    logger.error(
-                        f"[{self.client_id}] Writeback status update failed for id {writeback_status_id}: {e}"
-                    )
+                    logger.error(f"[{self.client_id}] Writeback status update failed: {e}")
                     return False
-
         return False
 
     def _reconnect_if_needed(self):
