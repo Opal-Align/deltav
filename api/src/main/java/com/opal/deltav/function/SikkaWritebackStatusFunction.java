@@ -19,13 +19,31 @@ import java.util.logging.Logger;
 /**
  * Receives asynchronous writeback_status callbacks from Sikka once the PMS
  * confirms (or rejects) an appointment write-back, and forwards the raw
- * payload to the client's writeback-status queue for
- * writeback_status_worker.py to apply.
+ * payload to the owning client's writeback-status queue for
+ * writeback_status_worker.py to apply. The client is resolved from the
+ * Sikka office_id in the payload via OFFICE_ID_TO_CLIENT_ID.
  */
 public class SikkaWritebackStatusFunction {
 
     private static final String QUEUE_NAME_SUFFIX = "-sikka-writeback-status-queue";
     private static final Gson gson = new Gson();
+
+    // Sikka office_id -> client_id
+    private static final Map<String, String> OFFICE_ID_TO_CLIENT_ID = Map.ofEntries(
+            Map.entry("D14699", "101"),
+            Map.entry("D42331", "101"),
+            Map.entry("D42333", "101"),
+            Map.entry("D21563", "101"),
+            Map.entry("D45500", "101"),
+            Map.entry("D21469", "101"),
+            Map.entry("D54423", "101"),
+            Map.entry("D42301", "101"),
+            Map.entry("D41491", "101"),
+            Map.entry("D42058", "101"),
+            Map.entry("D42332", "101"),
+            Map.entry("D44443", "101"),
+            Map.entry("D52011", "100")
+    );
 
     @FunctionName("sikkaWritebackStatus")
     public HttpResponseMessage run(
@@ -38,8 +56,8 @@ public class SikkaWritebackStatusFunction {
             final ExecutionContext context) {
 
         Logger logger = context.getLogger();
-
-        String expectedApiKey = System.getenv("SIKKA_CALLBACK_API_KEY");
+        //openssl rand -hex 32
+        String expectedApiKey = System.getenv("SIKKA_CALLBACK_API_KEY", "2417985fbcbd867f904d1601335e087d0ae400f26fdd7f49783a1d53ff9d5d7d");
         if (expectedApiKey == null || expectedApiKey.isBlank()) {
             logger.severe("SIKKA_CALLBACK_API_KEY is not configured");
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
@@ -52,83 +70,92 @@ public class SikkaWritebackStatusFunction {
             return jsonResponse(request, HttpStatus.UNAUTHORIZED, Map.of("error", "Invalid API key"));
         }
 
-        String clientId = System.getenv("SIKKA_CALLBACK_CLIENT_ID");
-        if (clientId == null || clientId.isBlank()) {
-            logger.severe("SIKKA_CALLBACK_CLIENT_ID is not configured");
-            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
-                    Map.of("error", "Server configuration error"));
-        }
-
         String body = request.getBody().orElse(null);
         if (body == null || body.isBlank()) {
             logger.warning("Sikka writeback_status callback rejected: empty body");
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Request body is required"));
         }
 
-        JsonElement root;
+        JsonArray items;
         try {
-            // The queue consumer accepts a single item, a bare list, or a
-            // paginated {"items": [...]} response - all are valid shapes here.
-            root = gson.fromJson(body, JsonElement.class);
+            JsonElement root = gson.fromJson(body, JsonElement.class);
+            if (root == null || !root.isJsonObject() || !root.getAsJsonObject().has("items")
+                    || !root.getAsJsonObject().get("items").isJsonArray()) {
+                logger.warning("Sikka writeback_status callback rejected: body has no \"items\" array");
+                return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Expected an \"items\" array"));
+            }
+            items = root.getAsJsonObject().getAsJsonArray("items");
         } catch (JsonParseException e) {
             logger.warning("Sikka writeback_status callback rejected: invalid JSON - " + e.getMessage());
             return jsonResponse(request, HttpStatus.BAD_REQUEST, Map.of("error", "Invalid JSON"));
         }
 
-        JsonElement toPublish = dropPendingItems(root);
-        if (toPublish == null) {
-            logger.info("Sikka writeback_status callback is Pending only, nothing to do");
-            return jsonResponse(request, HttpStatus.OK, Map.of("success", true));
+        MessagePublisher publisher = MessagePublisherFactory.getPublisher();
+        int published = 0;
+        int skipped = 0;
+        boolean anyFailure = false;
+
+        for (JsonElement element : items) {
+            if (!element.isJsonObject()) {
+                logger.warning("Sikka writeback_status callback item skipped: not a JSON object");
+                skipped++;
+                continue;
+            }
+            JsonObject item = element.getAsJsonObject();
+
+            String officeId = getStr(item, "office_id");
+            if (officeId == null) officeId = getStr(item, "officeId");
+            if (officeId == null || officeId.isBlank()) {
+                logger.warning("Sikka writeback_status callback item skipped: missing office_id - " + item);
+                skipped++;
+                continue;
+            }
+
+            String clientId = OFFICE_ID_TO_CLIENT_ID.get(officeId);
+            if (clientId == null) {
+                logger.severe("Sikka writeback_status callback item skipped: unknown office_id " + officeId);
+                skipped++;
+                continue;
+            }
+
+            if (isPending(item)) {
+                logger.info("Sikka writeback_status callback item for office_id " + officeId + " is Pending, nothing to do");
+                skipped++;
+                continue;
+            }
+
+            String queueName = clientId + QUEUE_NAME_SUFFIX;
+            try {
+                publisher.publishRaw(queueName, gson.toJson(item), logger);
+                logger.info("Sikka writeback_status item (office_id=" + officeId + ") published to queue '" + queueName + "'");
+                published++;
+            } catch (Exception e) {
+                anyFailure = true;
+                logger.severe("Failed to publish Sikka writeback_status item (office_id=" + officeId + "): "
+                        + e.getClass().getName() + " - " + e.getMessage());
+            }
         }
 
-        String queueName = clientId + QUEUE_NAME_SUFFIX;
-        try {
-            MessagePublisher publisher = MessagePublisherFactory.getPublisher();
-            publisher.publishRaw(queueName, gson.toJson(toPublish), logger);
-            logger.info("Sikka writeback_status callback published to queue '" + queueName + "'");
-            return jsonResponse(request, HttpStatus.OK, Map.of("success", true));
-        } catch (Exception e) {
-            logger.severe("Failed to publish Sikka writeback_status callback: " + e.getClass().getName() + " - " + e.getMessage());
+        logger.info("Sikka writeback_status callback processed: " + published + " published, " + skipped + " skipped");
+
+        if (anyFailure) {
             return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR, Map.of("error", "Internal server error"));
         }
+        return jsonResponse(request, HttpStatus.OK, Map.of("success", true, "published", published, "skipped", skipped));
     }
 
     /**
-     * Removes items whose status is "Pending" - nothing to apply for those yet,
-     * Sikka will call back again once the PMS resolves them. Returns null when
-     * nothing is left to publish.
+     * Nothing to apply yet for a Pending status - Sikka will call back again
+     * once the PMS resolves it.
      */
-    private JsonElement dropPendingItems(JsonElement root) {
-        if (root.isJsonObject()) {
-            JsonObject obj = root.getAsJsonObject();
-            if (obj.has("items") && obj.get("items").isJsonArray()) {
-                JsonArray filtered = filterPending(obj.getAsJsonArray("items"));
-                if (filtered.isEmpty()) return null;
-                obj.add("items", filtered);
-                return obj;
-            }
-            return isPending(obj) ? null : obj;
-        }
-        if (root.isJsonArray()) {
-            JsonArray filtered = filterPending(root.getAsJsonArray());
-            return filtered.isEmpty() ? null : filtered;
-        }
-        return root;
-    }
-
-    private JsonArray filterPending(JsonArray items) {
-        JsonArray result = new JsonArray();
-        for (JsonElement item : items) {
-            if (item.isJsonObject() && isPending(item.getAsJsonObject())) continue;
-            result.add(item);
-        }
-        return result;
-    }
-
     private boolean isPending(JsonObject item) {
         JsonElement status = item.get("status");
         return status != null && status.isJsonPrimitive()
                 && "Pending".equalsIgnoreCase(status.getAsString());
+    }
+
+    private String getStr(JsonObject j, String field) {
+        return j.has(field) && !j.get(field).isJsonNull() ? j.get(field).getAsString() : null;
     }
 
     private boolean constantTimeEquals(String a, String b) {
