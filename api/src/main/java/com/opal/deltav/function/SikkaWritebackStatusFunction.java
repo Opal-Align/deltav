@@ -57,11 +57,9 @@ public class SikkaWritebackStatusFunction {
 
         Logger logger = context.getLogger();
         //openssl rand -hex 32
-        String expectedApiKey = System.getenv("SIKKA_CALLBACK_API_KEY", "2417985fbcbd867f904d1601335e087d0ae400f26fdd7f49783a1d53ff9d5d7d");
+        String expectedApiKey = System.getenv("SIKKA_CALLBACK_API_KEY");
         if (expectedApiKey == null || expectedApiKey.isBlank()) {
-            logger.severe("SIKKA_CALLBACK_API_KEY is not configured");
-            return jsonResponse(request, HttpStatus.INTERNAL_SERVER_ERROR,
-                    Map.of("error", "Server configuration error"));
+            expectedApiKey = "2417985fbcbd867f904d1601335e087d0ae400f26fdd7f49783a1d53ff9d5d7d";
         }
 
         String providedApiKey = getHeaderIgnoreCase(request.getHeaders(), "callback-key");
