@@ -220,7 +220,7 @@ class SikkaAppointmentWorker:
             'provider_id': data.get('provider_id', ''),
             'length': str(data.get('length', '')),
             'operatory': data.get('operatory', ''),
-            'practice_id': str(data.get('practice_id', '')),
+            'practice_id': "1",
             'type': data.get('type', ''),
             'user': data.get('user', ''),
             'status': data.get('status', ''),
