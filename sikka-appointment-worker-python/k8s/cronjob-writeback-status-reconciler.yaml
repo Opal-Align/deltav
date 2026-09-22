@@ -8,7 +8,7 @@ metadata:
     app: sikka-writeback-status-reconciler
     client: "${CLIENT_ID}"
 spec:
-  schedule: "*/5 * * * *"
+  schedule: "*/2 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

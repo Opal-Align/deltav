@@ -43,7 +43,7 @@ class WritebackStatusReconciler:
     SELECT_PENDING_SQL = """
         SELECT TOP (?) id, writeback_status_id, sikka_office_id
         FROM trace_appt_writeback_requests
-        WHERE writeback_status_id IS NOT NULL AND (status IS NULL OR status = '')
+        WHERE writeback_status_id IS NOT NULL AND status = 'PENDING'
         ORDER BY created_dt ASC
     """
 
@@ -202,11 +202,11 @@ class WritebackStatusReconciler:
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None
             return self._execute_update(
-                self.UPDATE_SUCCESS_SQL, ('Success', appointment_sr_no, updated_dt, row_id)
+                self.UPDATE_SUCCESS_SQL, ('SCHEDULED', appointment_sr_no, updated_dt, row_id)
             )
 
         logger.error(f"[{self.client_id}] Writeback failed for row {row_id}: {item}")
-        return self._execute_update(self.UPDATE_FAILED_SQL, ('Failed', updated_dt, row_id))
+        return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', updated_dt, row_id))
 
     def _execute_update(self, sql: str, params: tuple) -> bool:
         for attempt in range(self.max_retries):

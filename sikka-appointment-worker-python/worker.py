@@ -315,7 +315,7 @@ class SikkaAppointmentWorker:
         if not (patient_key and practice_id) and not request_id:
             return
 
-        status = 'SIKKA_SCHEDULED' if success else 'SIKKA_FAILED'
+        status = 'PENDING' if success else 'FAILED'
         writeback_status_id = self._extract_writeback_status_id(detail) if success else None
         updated_dt = datetime.utcnow()
 
