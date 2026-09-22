@@ -10,6 +10,7 @@ each, and applies the result:
   - not yet completed on the PMS side -> left alone, picked up next run
 """
 
+import json
 import logging
 import os
 import sys
@@ -124,6 +125,10 @@ class WritebackStatusReconciler:
             return False
 
         item = self._fetch_writeback_status(writeback_status_id, request_key)
+        logger.info(
+            f"[{self.client_id}] Writeback status response for writeback_status_id "
+            f"{writeback_status_id}: {json.dumps(item) if item is not None else None}"
+        )
         if item is None:
             return False  # not found / not yet completed - retry next run
         return self._apply_result(row_id, item)
@@ -209,6 +214,7 @@ class WritebackStatusReconciler:
         return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', updated_dt, row_id))
 
     def _execute_update(self, sql: str, params: tuple) -> bool:
+        logger.info(f"[{self.client_id}] Update query: {' '.join(sql.split())} | params={params}")
         for attempt in range(self.max_retries):
             try:
                 cursor = self.db_connection.cursor()
