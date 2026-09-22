@@ -167,6 +167,10 @@ class SikkaAppointmentWorker:
 
                 payload = self._build_payload(data)
                 success, result = self._call_sikka(payload, request_key)
+                logger.info(
+                    f"[{self.client_id}] Sikka response for message {msg.id}: "
+                    f"{json.dumps(result) if isinstance(result, (dict, list)) else result}"
+                )
                 self._record_outcome(data, success=success, detail=result)
 
                 if success:
