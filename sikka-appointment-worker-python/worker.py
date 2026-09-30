@@ -262,6 +262,7 @@ class SikkaAppointmentWorker:
             payload['first_name'] = data.get('first_name', '')
             payload['last_name'] = data.get('last_name', '')
             payload['zipcode'] = data.get('zipcode', '')
+            payload['is_new_patient'] = 'true'
         else:
             payload['patient_id'] = str(data.get('patient_id', ''))
 
@@ -340,7 +341,10 @@ class SikkaAppointmentWorker:
         patient_key = data.get('patient_key')
         practice_id = data.get('practice_id')
         request_id = data.get('request_id')
-        if not (patient_key and practice_id) and not request_id:
+        # New patients have no patient_key yet (not registered in the PMS) - trace_appt_requests
+        # can only be updated by patient_key for already-existing patients.
+        can_update_trace = bool(patient_key and practice_id) and not self._is_new_patient(data)
+        if not can_update_trace and not request_id:
             return
 
         status = 'PENDING' if success else 'FAILED'
@@ -351,7 +355,7 @@ class SikkaAppointmentWorker:
         for attempt in range(self.max_retries):
             try:
                 cursor = self.db_connection.cursor()
-                if patient_key and practice_id:
+                if can_update_trace:
                     cursor.execute(self.UPDATE_SQL, (status, updated_dt, patient_key, practice_id))
                 if request_id:
                     cursor.execute(
