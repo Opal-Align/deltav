@@ -57,7 +57,9 @@ class SikkaAppointmentWorker:
     """
 
     # Fields required to build a valid Sikka appointment request
-    REQUIRED_FIELDS = ('patient_id', 'practice_id', 'date', 'time')
+    BASE_REQUIRED_FIELDS = ('practice_id', 'date', 'time')
+    # A new (not yet PMS-registered) patient has no patient_id yet - Sikka needs these instead
+    NEW_PATIENT_REQUIRED_FIELDS = ('first_name', 'last_name', 'zipcode')
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -210,14 +212,24 @@ class SikkaAppointmentWorker:
         except Exception:
             return None
 
+    def _is_new_patient(self, data: dict) -> bool:
+        """A message represents a new, not-yet-PMS-registered patient when is_patient_exist == 0."""
+        return int(data.get('is_patient_exist', 1)) == 0
+
     def _validate_message(self, data: dict) -> list:
         """Validate mandatory fields. Returns list of missing fields."""
-        return [field for field in self.REQUIRED_FIELDS if not data.get(field)]
+        missing = [field for field in self.BASE_REQUIRED_FIELDS if not data.get(field)]
+
+        if self._is_new_patient(data):
+            missing += [field for field in self.NEW_PATIENT_REQUIRED_FIELDS if not data.get(field)]
+        elif not data.get('patient_id'):
+            missing.append('patient_id')
+
+        return missing
 
     def _build_payload(self, data: dict) -> dict:
         """Map queue message fields to the Sikka POST /v4/appointment request body."""
-        return {
-            'patient_id': str(data.get('patient_id', '')),
+        payload = {
             'date': data.get('date', ''),
             'description': data.get('description', ''),
             'time': data.get('time', ''),
@@ -244,8 +256,16 @@ class SikkaAppointmentWorker:
             'address_line2': data.get('address_line2', ''),
             'city': data.get('city', ''),
             'state': data.get('state', ''),
-            'zipcode': data.get('zipcode', ''),
         }
+
+        if self._is_new_patient(data):
+            payload['first_name'] = data.get('first_name', '')
+            payload['last_name'] = data.get('last_name', '')
+            payload['zipcode'] = data.get('zipcode', '')
+        else:
+            payload['patient_id'] = str(data.get('patient_id', ''))
+
+        return payload
 
     def _call_sikka(self, payload: dict, request_key: str) -> tuple:
         """POST the appointment to Sikka with retry. Returns (success, response body or error message)."""
