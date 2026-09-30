@@ -259,8 +259,8 @@ class SikkaAppointmentWorker:
         }
 
         if self._is_new_patient(data):
-            payload['first_name'] = data.get('first_name', '')
-            payload['last_name'] = data.get('last_name', '')
+            payload['firstname'] = data.get('first_name', '')
+            payload['lastname'] = data.get('last_name', '')
             payload['zipcode'] = data.get('zipcode', '')
             payload['is_new_patient'] = 'true'
         else:
