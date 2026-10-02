@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Shared helpers for Sikka worker processes: graceful shutdown, queue/DB connection, token cache."""
 
+import json
 import logging
 import os
 import re
@@ -16,6 +17,9 @@ from azure.identity import DefaultAzureCredential, ManagedIdentityCredential
 from azure.storage.queue import QueueClient
 
 logger = logging.getLogger(__name__)
+
+RESOURCE_TYPE_PATIENTS = 'patients'
+RESOURCE_TYPE_APPOINTMENTS = 'appointments'
 
 
 class GracefulShutdown:
@@ -87,6 +91,117 @@ def connect_db(client_id: str, max_retries: int, retry_delay: float) -> pyodbc.C
                 time.sleep(retry_delay * (attempt + 1))
             else:
                 raise
+
+
+_SELECT_PATIENT_WRITEBACK_ROW_SQL = """
+    SELECT trace_appt_req_id, patient_key, practice_id, sikka_office_id, guarantor_id,
+           provider_id, [date], [time], [length], description, procedure_codes, operatory,
+           writeback_resource_type
+    FROM trace_appt_writeback_requests
+    WHERE writeback_status_id = ?
+"""
+
+_INSERT_APPOINTMENT_WRITEBACK_SQL = """
+    INSERT INTO trace_appt_writeback_requests
+        (trace_appt_req_id, patient_key, patient_id, practice_id, sikka_office_id, guarantor_id,
+         provider_id, [date], [time], [length], description, procedure_codes, operatory, status,
+         created_dt, created_by, writeback_resource_type)
+    OUTPUT INSERTED.id
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', GETDATE(), 'system', 'appointments')
+"""
+
+_UPDATE_TRACE_APPT_REQUEST_WRITEBACK_ID_SQL = """
+    UPDATE trace_appt_requests SET writeback_req_id = ? WHERE id = ?
+"""
+
+
+def trigger_appointment_after_patient_created(client_id: str, db_connection: pyodbc.Connection,
+                                               appointment_queue_client: QueueClient,
+                                               writeback_status_id, patient_id) -> Optional[int]:
+    """Resumes a booking that was deferred for patient creation, once that patient now exists.
+
+    Mirrors AppointmentService.bookAppointment's existing-patient path in the Java backend:
+    inserts a new "appointments" trace_appt_writeback_requests row carrying over the booking
+    details captured on the resolved "patients" row, then pushes the appointment queue message.
+    Returns the new writeback row id, or None if nothing was triggered.
+    """
+    cursor = db_connection.cursor()
+    cursor.execute(_SELECT_PATIENT_WRITEBACK_ROW_SQL, (writeback_status_id,))
+    row = cursor.fetchone()
+    if not row:
+        logger.error(
+            f"[{client_id}] No trace_appt_writeback_requests row found for writeback_status_id "
+            f"{writeback_status_id}, cannot trigger appointment"
+        )
+        cursor.close()
+        return None
+
+    (trace_appt_req_id, patient_key, practice_id, sikka_office_id, guarantor_id,
+     provider_id, appt_date, appt_time, length, description, procedure_codes, operatory,
+     writeback_resource_type) = row
+
+    if writeback_resource_type != RESOURCE_TYPE_PATIENTS:
+        logger.warning(
+            f"[{client_id}] trace_appt_writeback_requests row for writeback_status_id "
+            f"{writeback_status_id} is not a '{RESOURCE_TYPE_PATIENTS}' row "
+            f"(writeback_resource_type={writeback_resource_type}), skipping appointment trigger"
+        )
+        cursor.close()
+        return None
+
+    cursor.execute(
+        _INSERT_APPOINTMENT_WRITEBACK_SQL,
+        (trace_appt_req_id, patient_key, str(patient_id), practice_id, sikka_office_id, guarantor_id,
+         provider_id, appt_date, appt_time, length, description, procedure_codes, operatory)
+    )
+    new_writeback_id = cursor.fetchone()[0]
+    cursor.execute(_UPDATE_TRACE_APPT_REQUEST_WRITEBACK_ID_SQL, (new_writeback_id, trace_appt_req_id))
+    db_connection.commit()
+    cursor.close()
+
+    payload = {
+        'patient_id': str(patient_id),
+        'first_name': '',
+        'last_name': '',
+        'is_patient_exist': '1',
+        'date': appt_date.strftime('%Y-%m-%d') if appt_date else '',
+        'description': description or '',
+        'time': appt_time.strftime('%H:%M') if appt_time else '',
+        'provider_id': provider_id or '',
+        'length': str(length) if length is not None else '',
+        'operatory': operatory or '',
+        'practice_id': str(practice_id),
+        'type': '',
+        'user': '',
+        'status': '',
+        'note': '',
+        'procedure_code': procedure_codes or '',
+        'amount': '',
+        'tooth': '',
+        'surface': '',
+        'root': '',
+        'quadrant': '',
+        'is_guarantor_exist': '',
+        'gender': '',
+        'workphone': '',
+        'cell': '',
+        'other_phone': '',
+        'address_line1': '',
+        'address_line2': '',
+        'city': '',
+        'state': '',
+        'office_id': sikka_office_id or '',
+        'request_id': new_writeback_id,
+        'trace_appt_req_id': trace_appt_req_id,
+        'resource_type': RESOURCE_TYPE_APPOINTMENTS,
+    }
+
+    appointment_queue_client.send_message(json.dumps(payload))
+    logger.info(
+        f"[{client_id}] Triggered deferred appointment booking - writeback id {new_writeback_id}, "
+        f"trace_appt_req_id {trace_appt_req_id}, patient_id {patient_id}"
+    )
+    return new_writeback_id
 
 
 class SikkaTokenManager:
