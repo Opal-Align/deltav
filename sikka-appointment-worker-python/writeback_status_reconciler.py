@@ -31,7 +31,7 @@ except ImportError:
 import pyodbc
 import requests
 
-from common import connect_db, SikkaTokenManager
+from common import connect_db, connect_queue, SikkaTokenManager, trigger_appointment_after_patient_created
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +75,7 @@ class WritebackStatusReconciler:
         self.client_id = os.getenv('CLIENT_ID', 'default')
         self.db_connection: Optional[pyodbc.Connection] = None
         self.token_manager: Optional[SikkaTokenManager] = None
+        self.appointment_queue_client = None
 
         self.batch_size = int(os.getenv('WRITEBACK_RECONCILE_BATCH_SIZE', '100'))
         self.max_retries = int(os.getenv('MAX_RETRIES', '3'))
@@ -93,6 +94,10 @@ class WritebackStatusReconciler:
             retry_delay=self.retry_delay,
             http_timeout=self.http_timeout,
         )
+
+        appointment_queue_name = os.getenv('SIKKA_QUEUE_NAME') or f"{self.client_id}-sikka-appointment-queue"
+        self.appointment_queue_client = connect_queue(self.client_id, appointment_queue_name)
+
         self.db_connection = connect_db(self.client_id, self.max_retries, self.retry_delay)
 
     def run(self) -> int:
@@ -142,7 +147,7 @@ class WritebackStatusReconciler:
         )
         if item is None:
             return False  # not found / not yet completed - retry next run
-        return self._apply_result(row_id, item)
+        return self._apply_result(row_id, writeback_status_id, item)
 
     def _fetch_pending(self) -> list:
         """Fetch (id, writeback_status_id, sikka_office_id) rows still awaiting a resolved status."""
@@ -205,7 +210,7 @@ class WritebackStatusReconciler:
 
         return None
 
-    def _apply_result(self, row_id, item: dict) -> bool:
+    def _apply_result(self, row_id, writeback_status_id, item: dict) -> bool:
         """Apply a resolved writeback_status item to its trace_appt_writeback_requests row."""
         status = (item.get('status') or '').strip()
         message = item.get('result') or None
@@ -215,9 +220,12 @@ class WritebackStatusReconciler:
         if is_patient:
             if status.lower() == 'success':
                 patient_id = item.get('patient_id') or None
-                return self._execute_update(
+                updated = self._execute_update(
                     self.UPDATE_SUCCESS_PATIENT_SQL, ('CREATED', patient_id, message, updated_dt, row_id)
                 )
+                if updated and patient_id:
+                    self._trigger_appointment(writeback_status_id, patient_id)
+                return updated
             if status.lower() == 'failed':
                 logger.error(f"[{self.client_id}] Patient creation failed for row {row_id}: {item}")
                 return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, row_id))
@@ -241,6 +249,19 @@ class WritebackStatusReconciler:
             return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, row_id))
 
         return False  # not yet a terminal status - retry next run
+
+    def _trigger_appointment(self, writeback_status_id, patient_id):
+        """Resume the appointment booking that was deferred pending this patient's creation."""
+        try:
+            trigger_appointment_after_patient_created(
+                self.client_id, self.db_connection, self.appointment_queue_client,
+                writeback_status_id, patient_id
+            )
+        except Exception as e:
+            logger.error(
+                f"[{self.client_id}] Failed to trigger appointment booking for writeback_status_id "
+                f"{writeback_status_id}: {e}"
+            )
 
     def _execute_update(self, sql: str, params: tuple) -> bool:
         logger.info(f"[{self.client_id}] Update query: {' '.join(sql.split())} | params={params}")
