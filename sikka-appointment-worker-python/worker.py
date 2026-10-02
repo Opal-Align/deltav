@@ -58,8 +58,10 @@ class SikkaAppointmentWorker:
 
     # Fields required to build a valid Sikka appointment request
     BASE_REQUIRED_FIELDS = ('practice_id', 'date', 'time')
-    # A new (not yet PMS-registered) patient has no patient_id yet - Sikka needs these instead
-    NEW_PATIENT_REQUIRED_FIELDS = ('first_name', 'last_name', 'zipcode')
+    # Fields required to build a valid Sikka patient-creation request
+    PATIENT_REQUIRED_FIELDS = ('first_name', 'last_name', 'provider_id')
+
+    RESOURCE_TYPE_PATIENTS = 'patients'
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -78,6 +80,7 @@ class SikkaAppointmentWorker:
 
         # Sikka API configuration
         self.sikka_api_url = os.getenv('SIKKA_API_URL', 'https://api.sikkasoft.com/v4/appointment')
+        self.sikka_patient_api_url = os.getenv('SIKKA_PATIENT_API_URL', 'https://api.sikkasoft.com/v4/patient')
         self.http_timeout = float(os.getenv('SIKKA_HTTP_TIMEOUT', '15'))
 
         # Connection health check settings (default: 5 minutes)
@@ -167,8 +170,13 @@ class SikkaAppointmentWorker:
                     # Leave message in queue; retried until max_dequeue_count is hit.
                     continue
 
-                payload = self._build_payload(data)
-                success, result = self._call_sikka(payload, request_key)
+                if self._is_patient_resource(data):
+                    payload = self._build_patient_payload(data)
+                    success, result = self._call_sikka(payload, request_key, self.sikka_patient_api_url)
+                else:
+                    payload = self._build_payload(data)
+                    success, result = self._call_sikka(payload, request_key, self.sikka_api_url)
+
                 logger.info(
                     f"[{self.client_id}] Sikka response for message {msg.id}: "
                     f"{json.dumps(result) if isinstance(result, (dict, list)) else result}"
@@ -179,7 +187,7 @@ class SikkaAppointmentWorker:
                     self.queue_client.delete_message(msg.id, msg.pop_receipt)
                     processed_count += 1
                 else:
-                    logger.error(f"[{self.client_id}] Sikka appointment failed for message {msg.id}: {result}")
+                    logger.error(f"[{self.client_id}] Sikka request failed for message {msg.id}: {result}")
                     # Leave message in queue; it becomes visible again after the
                     # visibility timeout and is retried until max_dequeue_count is hit.
 
@@ -212,20 +220,29 @@ class SikkaAppointmentWorker:
         except Exception:
             return None
 
-    def _is_new_patient(self, data: dict) -> bool:
-        """A message represents a new, not-yet-PMS-registered patient when is_patient_exist == 0."""
-        return int(data.get('is_patient_exist', 1)) == 0
+    def _is_patient_resource(self, data: dict) -> bool:
+        """A message represents a patient-creation request when resource_type == 'patients'."""
+        return str(data.get('resource_type', '')).lower() == self.RESOURCE_TYPE_PATIENTS
 
     def _validate_message(self, data: dict) -> list:
         """Validate mandatory fields. Returns list of missing fields."""
-        missing = [field for field in self.BASE_REQUIRED_FIELDS if not data.get(field)]
+        if self._is_patient_resource(data):
+            return [field for field in self.PATIENT_REQUIRED_FIELDS if not data.get(field)]
 
-        if self._is_new_patient(data):
-            missing += [field for field in self.NEW_PATIENT_REQUIRED_FIELDS if not data.get(field)]
-        elif not data.get('patient_id'):
+        missing = [field for field in self.BASE_REQUIRED_FIELDS if not data.get(field)]
+        if not data.get('patient_id'):
             missing.append('patient_id')
 
         return missing
+
+    def _build_patient_payload(self, data: dict) -> dict:
+        """Map queue message fields to the Sikka POST /v4/patient request body."""
+        return {
+            'firstname': data.get('first_name', ''),
+            'lastname': data.get('last_name', ''),
+            'provider_id': data.get('provider_id', ''),
+            'practice_id': '1',
+        }
 
     def _build_payload(self, data: dict) -> dict:
         """Map queue message fields to the Sikka POST /v4/appointment request body."""
@@ -256,20 +273,13 @@ class SikkaAppointmentWorker:
             'address_line2': data.get('address_line2', ''),
             'city': data.get('city', ''),
             'state': data.get('state', ''),
+            'patient_id': str(data.get('patient_id', '')),
         }
-
-        if self._is_new_patient(data):
-            payload['firstname'] = data.get('first_name', '')
-            payload['lastname'] = data.get('last_name', '')
-            payload['zipcode'] = data.get('zipcode', '')
-            payload['is_new_patient'] = 'true'
-        else:
-            payload['patient_id'] = str(data.get('patient_id', ''))
 
         return payload
 
-    def _call_sikka(self, payload: dict, request_key: str) -> tuple:
-        """POST the appointment to Sikka with retry. Returns (success, response body or error message)."""
+    def _call_sikka(self, payload: dict, request_key: str, url: str) -> tuple:
+        """POST to a Sikka endpoint with retry. Returns (success, response body or error message)."""
         headers = {
             'Content-Type': 'application/json',
             'Request-Key': request_key,
@@ -278,7 +288,7 @@ class SikkaAppointmentWorker:
         for attempt in range(self.max_retries):
             try:
                 response = requests.post(
-                    self.sikka_api_url,
+                    url,
                     json=payload,
                     headers=headers,
                     timeout=self.http_timeout
@@ -290,7 +300,7 @@ class SikkaAppointmentWorker:
                 # 4xx (other than 429) is a permanent rejection - retrying won't help
                 if response.status_code < 500 and response.status_code != 429:
                     logger.error(
-                        f"[{self.client_id}] Sikka rejected appointment "
+                        f"[{self.client_id}] Sikka rejected request "
                         f"({response.status_code}): {response.text}"
                     )
                     return False, self._safe_json(response) or response.text
@@ -341,9 +351,9 @@ class SikkaAppointmentWorker:
         patient_key = data.get('patient_key')
         practice_id = data.get('practice_id')
         request_id = data.get('request_id')
-        # New patients have no patient_key yet (not registered in the PMS) - trace_appt_requests
-        # can only be updated by patient_key for already-existing patients.
-        can_update_trace = bool(patient_key and practice_id) and not self._is_new_patient(data)
+        # Patient-creation requests have no patient_key yet - trace_appt_requests is keyed by
+        # patient_key and only applies to appointment requests.
+        can_update_trace = bool(patient_key and practice_id) and not self._is_patient_resource(data)
         if not can_update_trace and not request_id:
             return
 

@@ -5,8 +5,11 @@ Run-once batch job (scheduled every 5 minutes via a k8s CronJob): finds
 trace_appt_writeback_requests rows that have a writeback_status_id but no
 resolved status yet, queries Sikka's GET /v4/writeback_status?id=<id> for
 each, and applies the result:
-  - status "Success" -> sets appointment_sr_no and status = "Success"
-  - completed but not successful -> sets status = "Failed"
+  - appointments (api != "patients"): status "Success" -> sets appointment_sr_no and
+    status = "SCHEDULED"; completed but not successful -> status = "FAILED"
+    (or "RESCHEDULE" if the appointment was already scheduled)
+  - patients (api == "patients"): status "Success" -> sets patient_id and
+    status = "CREATED"; completed but not successful -> status = "FAILED"
   - not yet completed on the PMS side -> left alone, picked up next run
 """
 
@@ -54,11 +57,19 @@ class WritebackStatusReconciler:
         WHERE id = ?
     """
 
+    UPDATE_SUCCESS_PATIENT_SQL = """
+        UPDATE trace_appt_writeback_requests
+        SET status = ?, patient_id = ?, writeback_status_message = ?, updated_dt = ?
+        WHERE id = ?
+    """
+
     UPDATE_FAILED_SQL = """
         UPDATE trace_appt_writeback_requests
         SET status = ?, writeback_status_message = ?, updated_dt = ?
         WHERE id = ?
     """
+
+    RESOURCE_TYPE_PATIENTS = 'patients'
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -199,6 +210,18 @@ class WritebackStatusReconciler:
         status = (item.get('status') or '').strip()
         message = item.get('result') or None
         updated_dt = datetime.utcnow()
+        is_patient = (item.get('api') or '').strip().lower() == self.RESOURCE_TYPE_PATIENTS
+
+        if is_patient:
+            if status.lower() == 'success':
+                patient_id = item.get('patient_id') or None
+                return self._execute_update(
+                    self.UPDATE_SUCCESS_PATIENT_SQL, ('CREATED', patient_id, message, updated_dt, row_id)
+                )
+            if status.lower() == 'failed':
+                logger.error(f"[{self.client_id}] Patient creation failed for row {row_id}: {item}")
+                return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, row_id))
+            return False  # not yet a terminal status - retry next run
 
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None

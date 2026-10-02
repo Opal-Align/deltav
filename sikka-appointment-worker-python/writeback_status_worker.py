@@ -47,6 +47,12 @@ class WritebackStatusWorker:
         WHERE writeback_status_id = ?
     """
 
+    UPDATE_SUCCESS_PATIENT_SQL = """
+        UPDATE trace_appt_writeback_requests
+        SET status = ?, patient_id = ?, writeback_status_message = ?, updated_dt = ?
+        WHERE writeback_status_id = ?
+    """
+
     UPDATE_FAILED_SQL = """
         UPDATE trace_appt_writeback_requests
         SET status = ?, writeback_status_message = ?, updated_dt = ?
@@ -55,6 +61,8 @@ class WritebackStatusWorker:
 
     # Fields required to identify and apply a writeback_status item
     REQUIRED_FIELDS = ('id', 'status')
+
+    RESOURCE_TYPE_PATIENTS = 'patients'
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -165,6 +173,19 @@ class WritebackStatusWorker:
         status = (item.get('status') or '').strip()
         message = item.get('result') or None
         updated_dt = datetime.utcnow()
+        is_patient = (item.get('api') or '').strip().lower() == self.RESOURCE_TYPE_PATIENTS
+
+        if is_patient:
+            if status.lower() == 'success':
+                patient_id = item.get('patient_id') or None
+                return self._execute_update(
+                    self.UPDATE_SUCCESS_PATIENT_SQL,
+                    ('CREATED', patient_id, message, updated_dt, writeback_status_id)
+                )
+            logger.error(
+                f"[{self.client_id}] Patient creation failed for writeback_status_id {writeback_status_id}: {item}"
+            )
+            return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, writeback_status_id))
 
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None
