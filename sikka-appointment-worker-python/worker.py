@@ -44,12 +44,6 @@ logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(l
 class SikkaAppointmentWorker:
     """Worker that reads appointment requests from Azure Queue and creates them in Sikka."""
 
-    UPDATE_SQL = """
-        UPDATE trace_appt_requests
-        SET status = ?, updated_dt = ?
-        WHERE patient_key = ? AND practice_id = ?
-    """
-
     UPDATE_WRITEBACK_SQL = """
         UPDATE trace_appt_writeback_requests
         SET status = ?, writeback_status_id = ?, writeback_status_message = ?, updated_dt = ?
@@ -348,13 +342,8 @@ class SikkaAppointmentWorker:
         if not data:
             return
 
-        patient_key = data.get('patient_key')
-        practice_id = data.get('practice_id')
         request_id = data.get('request_id')
-        # Patient-creation requests have no patient_key yet - trace_appt_requests is keyed by
-        # patient_key and only applies to appointment requests.
-        can_update_trace = bool(patient_key and practice_id) and not self._is_patient_resource(data)
-        if not can_update_trace and not request_id:
+        if not request_id:
             return
 
         status = 'PENDING' if success else 'FAILED'
@@ -365,12 +354,9 @@ class SikkaAppointmentWorker:
         for attempt in range(self.max_retries):
             try:
                 cursor = self.db_connection.cursor()
-                if can_update_trace:
-                    cursor.execute(self.UPDATE_SQL, (status, updated_dt, patient_key, practice_id))
-                if request_id:
-                    cursor.execute(
-                        self.UPDATE_WRITEBACK_SQL, (status, writeback_status_id, message, updated_dt, request_id)
-                    )
+                cursor.execute(
+                    self.UPDATE_WRITEBACK_SQL, (status, writeback_status_id, message, updated_dt, request_id)
+                )
                 self.db_connection.commit()
                 cursor.close()
                 return
