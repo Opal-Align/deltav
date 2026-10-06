@@ -66,7 +66,7 @@ class SikkaAppointmentWorker:
         # Queue configuration
         self.batch_size = int(os.getenv('BATCH_SIZE', '16'))
         self.visibility_timeout = int(os.getenv('VISIBILITY_TIMEOUT', '30'))
-        self.max_dequeue_count = int(os.getenv('SIKKA_MAX_DEQUEUE_COUNT', '5'))
+        self.max_dequeue_count = int(os.getenv('SIKKA_MAX_DEQUEUE_COUNT', '1'))
 
         # Retry configuration (queue connect, DB, and Sikka HTTP calls)
         self.max_retries = int(os.getenv('MAX_RETRIES', '3'))

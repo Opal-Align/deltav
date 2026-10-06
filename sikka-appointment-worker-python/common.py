@@ -168,7 +168,7 @@ def trigger_appointment_after_patient_created(client_id: str, db_connection: pyo
         'description': description or '',
         'time': appt_time.strftime('%H:%M') if appt_time else '',
         'provider_id': provider_id or '',
-        'length': str(length) if length is not None else '',
+        'length': str(int(length)) if length is not None else '',
         'operatory': operatory or '',
         'practice_id': str(practice_id),
         'type': '',
