@@ -164,9 +164,14 @@ class SikkaAppointmentWorker:
                     # Leave message in queue; retried until max_dequeue_count is hit.
                     continue
 
+                appointment_sr_no = data.get('appointment_sr_no')
                 if self._is_patient_resource(data):
                     payload = self._build_patient_payload(data)
                     success, result = self._call_sikka(payload, request_key, self.sikka_patient_api_url)
+                elif appointment_sr_no:
+                    payload = self._build_appointment_update_payload(data)
+                    url = f"{self.sikka_api_url}/{appointment_sr_no}"
+                    success, result = self._call_sikka(payload, request_key, url, method='PUT')
                 else:
                     payload = self._build_payload(data)
                     success, result = self._call_sikka(payload, request_key, self.sikka_api_url)
@@ -272,8 +277,20 @@ class SikkaAppointmentWorker:
 
         return payload
 
-    def _call_sikka(self, payload: dict, request_key: str, url: str) -> tuple:
-        """POST to a Sikka endpoint with retry. Returns (success, response body or error message)."""
+    def _build_appointment_update_payload(self, data: dict) -> dict:
+        """Map queue message fields to the Sikka PUT /v4/appointment/{appointment_sr_no} request body."""
+        return {
+            'date': data.get('date', ''),
+            'description': data.get('description', ''),
+            'time': data.get('time', ''),
+            'provider_id': data.get('provider_id', ''),
+            'length': str(data.get('length', '')),
+            'operatory': data.get('operatory', ''),
+            'practice_id': '1',
+        }
+
+    def _call_sikka(self, payload: dict, request_key: str, url: str, method: str = 'POST') -> tuple:
+        """POST/PUT to a Sikka endpoint with retry. Returns (success, response body or error message)."""
         headers = {
             'Content-Type': 'application/json',
             'Request-Key': request_key,
@@ -281,7 +298,8 @@ class SikkaAppointmentWorker:
 
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
+                response = requests.request(
+                    method,
                     url,
                     json=payload,
                     headers=headers,
