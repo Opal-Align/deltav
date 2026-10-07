@@ -40,6 +40,11 @@ on:
         required: false
         default: 'latest'
         type: string
+      deploy_reconciler:
+        description: 'Reconciler CronJob is temporarily disabled - set true to deploy it anyway'
+        required: false
+        default: false
+        type: boolean
 
 env:
   NAMESPACE: ${{ github.event.inputs.namespace }}
@@ -106,6 +111,7 @@ jobs:
           envsubst < secret-${{ env.ENVIRONMENT }}.yaml | kubectl apply -n ${{ env.NAMESPACE }} -f -
 
       - name: Deploy Writeback Status Reconciler CronJob
+        if: ${{ github.event.inputs.deploy_reconciler == 'true' }}
         working-directory: ${{ env.MODULE_DIR }}/k8s
         run: |
           export CLIENT_ID=${{ github.event.inputs.client_id }}
