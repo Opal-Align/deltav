@@ -18,6 +18,13 @@ queue-worker-python/*.pyc
 queue-worker-python/.venv/
 queue-worker-python/.env
 
+sms-notifier-python/__pycache__/
+sms-notifier-python/*.pyc
+sms-notifier-python/.venv/
+sms-notifier-python/.env
+sms-notifier-python/sent_log.csv
+sms-notifier-python/sent_email_log.csv
+
 # OS
 .DS_Store
 Thumbs.db

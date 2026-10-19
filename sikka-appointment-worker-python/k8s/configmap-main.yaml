@@ -9,6 +9,7 @@ data:
   MAX_RETRIES: "3"
   RETRY_DELAY: "1.0"
   SIKKA_API_URL: "https://api.sikkasoft.com/v4/appointment"
+  SIKKA_PATIENT_API_URL: "https://api.sikkasoft.com/v4/patient"
   SIKKA_HTTP_TIMEOUT: "15"
   SIKKA_MAX_DEQUEUE_COUNT: "5"
   AZURE_STORAGE_ACCOUNT_URL: "https://traceappprod.queue.core.windows.net"

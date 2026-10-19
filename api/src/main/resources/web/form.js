@@ -10,6 +10,8 @@
   var relationshipOtherWrap = document.getElementById("relationship-other-wrap");
   var relationshipOtherInput = document.getElementById("relationship-other");
   var radios = form.querySelectorAll('input[name="registrant"]');
+  var patientTypeRadios = form.querySelectorAll('input[name="patient_type"]');
+  var newPatientDetailsSection = document.getElementById("new-patient-details-section");
 
   var API_BASE = window.DELTAV_API_URL || "";
   var practiceId = new URLSearchParams(window.location.search).get("practice") || "";
@@ -96,6 +98,59 @@
 
   radios.forEach(function (r) { r.addEventListener("change", toggleFromRegistrant); });
   relationshipSelect.addEventListener("change", toggleRelationshipOther);
+
+  // ── New patient details (cell/email/zip + appointment type) ───────────────
+  function isNewPatientSelected() {
+    var checked = form.querySelector('input[name="patient_type"]:checked');
+    return !!(checked && checked.value === "new");
+  }
+
+  function toggleNewPatientDetails() {
+    if (!newPatientDetailsSection) return;
+    var show = isNewPatientSelected();
+    newPatientDetailsSection.hidden = !show;
+    var reqIds = ["cell-phone", "email", "zip-code"];
+    reqIds.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (show) el.setAttribute("required", "required");
+      else el.removeAttribute("required");
+    });
+    var apptRadios = newPatientDetailsSection.querySelectorAll('input[name="appointment_type"]');
+    apptRadios.forEach(function (r) {
+      if (show) r.setAttribute("required", "required");
+      else r.removeAttribute("required");
+    });
+  }
+
+  patientTypeRadios.forEach(function (r) {
+    r.addEventListener("change", toggleNewPatientDetails);
+  });
+  toggleNewPatientDetails();
+
+  // Auto-format cell phone as (XXX) XXX-XXXX
+  var cellPhoneInput = document.getElementById("cell-phone");
+  if (cellPhoneInput) {
+    cellPhoneInput.addEventListener("input", function () {
+      var val = cellPhoneInput.value.replace(/[^\d]/g, "").slice(0, 10);
+      if (val.length >= 7) {
+        cellPhoneInput.value = "(" + val.slice(0, 3) + ") " + val.slice(3, 6) + "-" + val.slice(6);
+      } else if (val.length >= 4) {
+        cellPhoneInput.value = "(" + val.slice(0, 3) + ") " + val.slice(3);
+      } else if (val.length >= 1) {
+        cellPhoneInput.value = "(" + val;
+      }
+    });
+  }
+
+  // Zip: digits, with optional -XXXX
+  var zipInput = document.getElementById("zip-code");
+  if (zipInput) {
+    zipInput.addEventListener("input", function () {
+      var val = zipInput.value.replace(/[^\d]/g, "").slice(0, 9);
+      zipInput.value = val.length > 5 ? val.slice(0, 5) + "-" + val.slice(5) : val;
+    });
+  }
 
   // ── DOB auto-format MM/DD/YYYY ────────────────────────────────────────────
   var dobInput = document.getElementById("dob");
@@ -357,6 +412,27 @@
       if (!parsed) { showError("err-dob", "Please enter a valid date in MM/DD/YYYY format."); valid = false; }
       else if (parsed > new Date()) { showError("err-dob", "Date of birth cannot be in the future."); valid = false; }
     }
+    if (newPatientDetailsSection && !newPatientDetailsSection.hidden) {
+      var cellEl = document.getElementById("cell-phone");
+      var emailEl = document.getElementById("email");
+      var zipEl = document.getElementById("zip-code");
+
+      var phoneDigits = cellEl.value.replace(/[^\d]/g, "");
+      if (!phoneDigits) { showError("err-cell-phone", "Cell phone is required."); valid = false; }
+      else if (phoneDigits.length !== 10) { showError("err-cell-phone", "Please enter a valid 10-digit phone number."); valid = false; }
+
+      var emailValue = emailEl.value.trim();
+      if (!emailValue) { showError("err-email", "Email is required."); valid = false; }
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) { showError("err-email", "Please enter a valid email address."); valid = false; }
+
+      var zipValue = zipEl.value.trim();
+      if (!zipValue) { showError("err-zip-code", "Zip code is required."); valid = false; }
+      else if (!/^\d{5}(-\d{4})?$/.test(zipValue)) { showError("err-zip-code", "Please enter a valid zip code (12345 or 12345-6789)."); valid = false; }
+
+      var apptChecked = form.querySelector('input[name="appointment_type"]:checked');
+      if (!apptChecked) { showError("err-appointment-type", "Please select an appointment type."); valid = false; }
+    }
+
     if (selectedSlots.length === 0) { showError("err-slots", "Please select at least one preferred appointment time."); valid = false; }
     if (!ca.checked) { showError("err-confirm-accurate", "Please confirm the information is accurate."); valid = false; }
     if (!ap.checked) { showError("err-agree-privacy",    "Please agree to the privacy policy / HIPAA notice."); valid = false; }
@@ -676,6 +752,14 @@
 
     var middleName = document.getElementById("middle-name").value.trim();
     if (middleName) payload.middle_name = middleName;
+
+    if (newPatientDetailsSection && !newPatientDetailsSection.hidden) {
+      payload.cell_phone = document.getElementById("cell-phone").value.replace(/[^\d]/g, "");
+      payload.email      = document.getElementById("email").value.trim();
+      payload.zip_code   = document.getElementById("zip-code").value.trim();
+      var apptChecked    = form.querySelector('input[name="appointment_type"]:checked');
+      payload.appointment_type = apptChecked ? apptChecked.value : "";
+    }
 
     if (registrantValue === "another") {
       payload.relationship = relationshipSelect.value;

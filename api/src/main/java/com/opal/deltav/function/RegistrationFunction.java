@@ -101,8 +101,13 @@ public class RegistrationFunction {
             List<String> preferredSlots = getStringList(json, "preferred_slots");
             String comments = getStr(json, "comments");
 
+            // Derive is_patient_exist from patient_type (defaults to existing=1 when absent)
+            String patientType = getStr(json, "patient_type");
+            boolean isNewPatient = "new".equalsIgnoreCase(patientType);
+            int isPatientExist = isNewPatient ? 0 : 1;
+
             // Build queue message with patient info
-            QueueMessage queueMessage = QueueMessage.builder()
+            QueueMessage.Builder queueMessageBuilder = QueueMessage.builder()
                     .practiceId(practiceId)
                     .patientFirstName(patientFirstName)
                     .patientMiddleName(patientMiddleName)
@@ -111,7 +116,18 @@ public class RegistrationFunction {
                     .mobileNumber(mobileNumber)
                     .preferredSlots(preferredSlots)
                     .comments(comments)
-                    .build();
+                    .isPatientExist(isPatientExist);
+
+            // New-patient-only fields
+            if (isNewPatient) {
+                queueMessageBuilder
+                        .cellPhone(getStr(json, "cell_phone"))
+                        .email(getStr(json, "email"))
+                        .zipCode(getStr(json, "zip_code"))
+                        .appointmentType(getStr(json, "appointment_type"));
+            }
+
+            QueueMessage queueMessage = queueMessageBuilder.build();
 
             // Publish to queue
             MessagePublisher publisher = MessagePublisherFactory.getPublisher();

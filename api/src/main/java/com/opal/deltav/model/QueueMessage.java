@@ -18,6 +18,11 @@ public class QueueMessage {
     private final String mobileNumber;
     private final List<String> preferredSlots;
     private final String comments;
+    private final int isPatientExist;
+    private final String cellPhone;
+    private final String email;
+    private final String zipCode;
+    private final String appointmentType;
     private final OffsetDateTime submittedAt;
 
     private QueueMessage(Builder builder) {
@@ -31,6 +36,11 @@ public class QueueMessage {
         this.mobileNumber = builder.mobileNumber;
         this.preferredSlots = builder.preferredSlots;
         this.comments = builder.comments;
+        this.isPatientExist = builder.isPatientExist;
+        this.cellPhone = builder.cellPhone;
+        this.email = builder.email;
+        this.zipCode = builder.zipCode;
+        this.appointmentType = builder.appointmentType;
         this.submittedAt = builder.submittedAt != null ? builder.submittedAt : OffsetDateTime.now();
     }
 
@@ -74,6 +84,26 @@ public class QueueMessage {
         return comments;
     }
 
+    public int getIsPatientExist() {
+        return isPatientExist;
+    }
+
+    public String getCellPhone() {
+        return cellPhone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getZipCode() {
+        return zipCode;
+    }
+
+    public String getAppointmentType() {
+        return appointmentType;
+    }
+
     public OffsetDateTime getSubmittedAt() {
         return submittedAt;
     }
@@ -93,6 +123,11 @@ public class QueueMessage {
         private String mobileNumber;
         private List<String> preferredSlots;
         private String comments;
+        private int isPatientExist = 1;
+        private String cellPhone;
+        private String email;
+        private String zipCode;
+        private String appointmentType;
         private OffsetDateTime submittedAt;
 
         public Builder patientKey(Long patientKey) {
@@ -142,6 +177,31 @@ public class QueueMessage {
 
         public Builder comments(String comments) {
             this.comments = comments;
+            return this;
+        }
+
+        public Builder isPatientExist(int isPatientExist) {
+            this.isPatientExist = isPatientExist;
+            return this;
+        }
+
+        public Builder cellPhone(String cellPhone) {
+            this.cellPhone = cellPhone;
+            return this;
+        }
+
+        public Builder email(String email) {
+            this.email = email;
+            return this;
+        }
+
+        public Builder zipCode(String zipCode) {
+            this.zipCode = zipCode;
+            return this;
+        }
+
+        public Builder appointmentType(String appointmentType) {
+            this.appointmentType = appointmentType;
             return this;
         }
 

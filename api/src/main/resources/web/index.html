@@ -104,12 +104,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <h2 class="section-title">Patient Status</h2>
           <div class="radio-group" role="group" aria-label="Are you a new or existing patient?">
             <label class="radio-label">
-              <input type="radio" name="patient_type" value="new" checked />
+              <input type="radio" name="patient_type" value="new" />
               <span class="radio-custom"></span>
               <span class="radio-text">New patient</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="patient_type" value="existing" />
+              <input type="radio" name="patient_type" value="existing" checked />
               <span class="radio-custom"></span>
               <span class="radio-text">Existing patient</span>
             </label>
@@ -138,6 +138,43 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <label class="field-label" for="dob">Date of Birth</label>
             <input type="text" id="dob" name="dob" class="input" required placeholder="MM/DD/YYYY" maxlength="10" inputmode="numeric" />
             <span class="error-msg" id="err-dob" role="alert"></span>
+          </div>
+        </section>
+
+        <section class="section" id="new-patient-details-section" hidden>
+          <h2 class="section-title">New Patient Details</h2>
+          <div class="row">
+            <div class="field">
+              <label class="field-label" for="cell-phone">Cell Phone</label>
+              <input type="tel" id="cell-phone" name="cell_phone" class="input" placeholder="(555) 555-5555" maxlength="14" inputmode="tel" autocomplete="tel" />
+              <span class="error-msg" id="err-cell-phone" role="alert"></span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="email">Email</label>
+              <input type="email" id="email" name="email" class="input" placeholder="you@example.com" autocomplete="email" />
+              <span class="error-msg" id="err-email" role="alert"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="zip-code">Zip Code</label>
+            <input type="text" id="zip-code" name="zip_code" class="input" placeholder="12345" maxlength="10" inputmode="numeric" autocomplete="postal-code" />
+            <span class="error-msg" id="err-zip-code" role="alert"></span>
+          </div>
+          <div class="field">
+            <label class="field-label">Appointment Type</label>
+            <div class="radio-group" role="group" aria-label="Appointment type">
+              <label class="radio-label">
+                <input type="radio" name="appointment_type" value="new_patient_consultation" checked />
+                <span class="radio-custom"></span>
+                <span class="radio-text">New patient consultation</span>
+              </label>
+              <label class="radio-label">
+                <input type="radio" name="appointment_type" value="emergency_appointment" />
+                <span class="radio-custom"></span>
+                <span class="radio-text">Emergency appointment</span>
+              </label>
+            </div>
+            <span class="error-msg" id="err-appointment-type" role="alert"></span>
           </div>
         </section>
 

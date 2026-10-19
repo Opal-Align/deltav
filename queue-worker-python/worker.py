@@ -56,14 +56,16 @@ class QueueWorker:
 
     INSERT_SQL = """
         INSERT INTO trace_appt_requests (
-            patient_key, patient_id, practice_id,
+            practice_id,
             patient_first_name, patient_middle_name, patient_last_name,
             patient_dob, patient_phone,
             preferred_date1, preferred_time1,
             preferred_date2, preferred_time2,
             preferred_date3, preferred_time3,
-            comments, created_dt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            comments, is_patient_exist,
+            cell_phone, email, zip_code, appointment_type,
+            created_dt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     def __init__(self):
@@ -226,6 +228,12 @@ class QueueWorker:
         except Exception:
             return None
 
+    def _trim(self, value, default=''):
+        """Trim string values. Returns `default` ('' unless overridden) when value is None."""
+        if value is None:
+            return default
+        return value.strip() if isinstance(value, str) else value
+
     def _parse_slot(self, slot: str) -> tuple:
         """Parse slot string like '2026-07-08 09:00 AM' into (date, time)."""
         if not slot:
@@ -282,21 +290,24 @@ class QueueWorker:
             created_dt = datetime.fromisoformat(created_dt)
 
         return (
-            data.get('patientKey'),
-            data.get('patientId'),
             data.get('practiceId'),
-            data.get('patientFirstName'),
-            data.get('patientMiddleName'),
-            data.get('patientLastName'),
+            self._trim(data.get('patientFirstName')),
+            self._trim(data.get('patientMiddleName')),
+            self._trim(data.get('patientLastName')),
             patient_dob,
-            data.get('mobileNumber'),
+            self._trim(data.get('mobileNumber')),
             date1,
             time1,
             date2,
             time2,
             date3,
             time3,
-            data.get('comments'),
+            self._trim(data.get('comments')),
+            data.get('isPatientExist', 1),
+            self._trim(data.get('cellPhone')),
+            self._trim(data.get('email')),
+            self._trim(data.get('zipCode')),
+            self._trim(data.get('appointmentType')),
             created_dt
         )
 

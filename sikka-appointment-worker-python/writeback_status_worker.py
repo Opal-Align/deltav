@@ -25,7 +25,7 @@ except ImportError:
 
 import pyodbc
 
-from common import GracefulShutdown, connect_queue, connect_db
+from common import GracefulShutdown, connect_queue, connect_db, trigger_appointment_after_patient_created
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +47,12 @@ class WritebackStatusWorker:
         WHERE writeback_status_id = ?
     """
 
+    UPDATE_SUCCESS_PATIENT_SQL = """
+        UPDATE trace_appt_writeback_requests
+        SET status = ?, patient_id = ?, writeback_status_message = ?, updated_dt = ?
+        WHERE writeback_status_id = ?
+    """
+
     UPDATE_FAILED_SQL = """
         UPDATE trace_appt_writeback_requests
         SET status = ?, writeback_status_message = ?, updated_dt = ?
@@ -56,9 +62,12 @@ class WritebackStatusWorker:
     # Fields required to identify and apply a writeback_status item
     REQUIRED_FIELDS = ('id', 'status')
 
+    RESOURCE_TYPE_PATIENTS = 'patients'
+
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
         self.queue_client = None
+        self.appointment_queue_client = None
         self.db_connection: Optional[pyodbc.Connection] = None
 
         # Queue configuration
@@ -78,6 +87,10 @@ class WritebackStatusWorker:
         """Establish connections to queue and database."""
         queue_name = os.getenv('SIKKA_WRITEBACK_QUEUE_NAME') or f"{self.client_id}-sikka-writeback-status-queue"
         self.queue_client = connect_queue(self.client_id, queue_name)
+
+        appointment_queue_name = os.getenv('SIKKA_QUEUE_NAME') or f"{self.client_id}-sikka-appointment-queue"
+        self.appointment_queue_client = connect_queue(self.client_id, appointment_queue_name)
+
         self.db_connection = connect_db(self.client_id, self.max_retries, self.retry_delay)
 
     def process_batch(self) -> int:
@@ -165,6 +178,22 @@ class WritebackStatusWorker:
         status = (item.get('status') or '').strip()
         message = item.get('result') or None
         updated_dt = datetime.utcnow()
+        is_patient = (item.get('api') or '').strip().lower() == self.RESOURCE_TYPE_PATIENTS
+
+        if is_patient:
+            if status.lower() == 'success':
+                patient_id = item.get('patient_id') or None
+                updated = self._execute_update(
+                    self.UPDATE_SUCCESS_PATIENT_SQL,
+                    ('CREATED', patient_id, message, updated_dt, writeback_status_id)
+                )
+                if updated and patient_id:
+                    self._trigger_appointment(writeback_status_id, patient_id)
+                return updated
+            logger.error(
+                f"[{self.client_id}] Patient creation failed for writeback_status_id {writeback_status_id}: {item}"
+            )
+            return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, writeback_status_id))
 
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None
@@ -185,6 +214,19 @@ class WritebackStatusWorker:
 
         logger.error(f"[{self.client_id}] Writeback failed for writeback_status_id {writeback_status_id}: {item}")
         return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, writeback_status_id))
+
+    def _trigger_appointment(self, writeback_status_id, patient_id):
+        """Resume the appointment booking that was deferred pending this patient's creation."""
+        try:
+            trigger_appointment_after_patient_created(
+                self.client_id, self.db_connection, self.appointment_queue_client,
+                writeback_status_id, patient_id
+            )
+        except Exception as e:
+            logger.error(
+                f"[{self.client_id}] Failed to trigger appointment booking for writeback_status_id "
+                f"{writeback_status_id}: {e}"
+            )
 
     def _execute_update(self, sql: str, params: tuple) -> bool:
         for attempt in range(self.max_retries):
