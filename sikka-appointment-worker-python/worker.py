@@ -56,6 +56,7 @@ class SikkaAppointmentWorker:
     PATIENT_REQUIRED_FIELDS = ('first_name', 'last_name', 'provider_id')
 
     RESOURCE_TYPE_PATIENTS = 'patients'
+    HINT_CANCELLED_PENDING = 'CANCELLED_PENDING'
 
     def __init__(self):
         self.client_id = os.getenv('CLIENT_ID', 'default')
@@ -75,6 +76,9 @@ class SikkaAppointmentWorker:
         # Sikka API configuration
         self.sikka_api_url = os.getenv('SIKKA_API_URL', 'https://api.sikkasoft.com/v4/appointment')
         self.sikka_patient_api_url = os.getenv('SIKKA_PATIENT_API_URL', 'https://api.sikkasoft.com/v4/patient')
+        self.sikka_appointment_cancel_url = os.getenv(
+            'SIKKA_APPOINTMENT_CANCEL_URL', 'https://api.sikkasoft.com/v4/appointments'
+        )
         self.http_timeout = float(os.getenv('SIKKA_HTTP_TIMEOUT', '15'))
 
         # Connection health check settings (default: 5 minutes)
@@ -168,6 +172,10 @@ class SikkaAppointmentWorker:
                 if self._is_patient_resource(data):
                     payload = self._build_patient_payload(data)
                     success, result = self._call_sikka(payload, request_key, self.sikka_patient_api_url)
+                elif appointment_sr_no and self._is_cancellation(data):
+                    payload = self._build_appointment_cancel_payload(data)
+                    url = f"{self.sikka_appointment_cancel_url}/{appointment_sr_no}"
+                    success, result = self._call_sikka(payload, request_key, url, method='PATCH')
                 elif appointment_sr_no:
                     payload = self._build_appointment_update_payload(data)
                     url = f"{self.sikka_api_url}/{appointment_sr_no}"
@@ -222,6 +230,10 @@ class SikkaAppointmentWorker:
     def _is_patient_resource(self, data: dict) -> bool:
         """A message represents a patient-creation request when resource_type == 'patients'."""
         return str(data.get('resource_type', '')).lower() == self.RESOURCE_TYPE_PATIENTS
+
+    def _is_cancellation(self, data: dict) -> bool:
+        """A message represents an appointment cancellation when hint == 'CANCELLED_PENDING'."""
+        return str(data.get('hint', '')).upper() == self.HINT_CANCELLED_PENDING
 
     def _validate_message(self, data: dict) -> list:
         """Validate mandatory fields. Returns list of missing fields."""
@@ -287,6 +299,15 @@ class SikkaAppointmentWorker:
             'length': str(data.get('length', '')),
             'operatory': data.get('operatory', ''),
             'practice_id': '1',
+        }
+
+    def _build_appointment_cancel_payload(self, data: dict) -> dict:
+        """Map queue message fields to the Sikka PATCH /v4/appointments/{appointment_sr_no} cancellation body."""
+        return {
+            'practice_id': '1',
+            'op': 'replace',
+            'path': '/appointment_status',
+            'value': data.get('status', ''),
         }
 
     def _call_sikka(self, payload: dict, request_key: str, url: str, method: str = 'POST') -> tuple:
@@ -364,7 +385,12 @@ class SikkaAppointmentWorker:
         if not request_id:
             return
 
-        status = 'PENDING' if success else 'FAILED'
+        if not success:
+            status = 'FAILED'
+        elif self._is_cancellation(data):
+            status = self.HINT_CANCELLED_PENDING
+        else:
+            status = 'PENDING'
         writeback_status_id = self._extract_writeback_status_id(detail) if success else None
         message = self._extract_message(detail)
         updated_dt = datetime.utcnow()
