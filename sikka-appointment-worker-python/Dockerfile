@@ -44,7 +44,7 @@ ENV POLL_INTERVAL=1.0 \
     MAX_RETRIES=3 \
     SIKKA_API_URL=https://api.sikkasoft.com/v4/appointment \
     SIKKA_HTTP_TIMEOUT=15 \
-    SIKKA_MAX_DEQUEUE_COUNT=5 \
+    SIKKA_MAX_DEQUEUE_COUNT=2 \
     PYTHONUNBUFFERED=1
 
 CMD ["python", "worker.py"]
