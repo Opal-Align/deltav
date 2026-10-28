@@ -79,7 +79,9 @@ python3 send_email.py --csv your_patients.csv
 1. Connects to `DB_Metadata` and loads the practice table.
 2. For each CSV row, resolves `practice_id`/`client_id` against that table; skips (with a logged
    reason) any row whose practice doesn't exist, is inactive, has a `client_id` mismatch, or has no
-   usable sending number/address (`collect_phone_number` for SMS, `email_sender_id` for email).
+   usable sending number/address (`collect_phone_number` for SMS, `email_sender_id` for email). For
+   SMS, passing `--sms-from` overrides `collect_phone_number` and is used as the sender for every
+   row instead.
 3. Filters out anyone already logged as a successful send (see **Sent-log tracking** below).
 4. Sends to everyone remaining, pausing periodically to avoid overwhelming carriers/ACS (see
    **Batching** below).
@@ -96,10 +98,22 @@ python3 send_email.py --csv your_patients.csv
 | `--log-file <path>` | `sent_log.csv` / `sent_email_log.csv` | Where sent/failed outcomes are recorded |
 | `--resend` | off | Ignore the log and message everyone in the CSV again |
 
+### SMS-only flags
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--sms-from <number>` | *(none)* | Override the sending number for every message, taking precedence over each practice's `collect_phone_number`. Accepts any format `normalize_phone_number` understands (e.g. `+12025551234`, `2025551234`). |
+
 Example with custom pacing:
 
 ```bash
 python3 send_sms.py --csv your_patients.csv --batch-size 10 --batch-pause-seconds 10
+```
+
+Example overriding the sending number:
+
+```bash
+python3 send_sms.py --csv your_patients.csv --sms-from +12025551234
 ```
 
 ## 5. Sent-log tracking (avoiding duplicate sends)
@@ -154,7 +168,10 @@ Both templates can reference `{first_name}`, `{last_name}`, and `{practice_name}
   what's in `Metadata_ClientPractice`; double-check the source data.
 - **Row skipped: `no usable collect_phone_number` / `no usable email_sender_id`** — that practice's
   metadata row doesn't have a valid sending number/address configured; nothing can be sent for it
-  until that's fixed in the database.
+  until that's fixed in the database. Pass `--sms-from` to bypass this for SMS by supplying the
+  sending number directly.
+- **`--sms-from value '...' could not be normalized to E.164`** — the value passed to `--sms-from`
+  isn't a recognizable phone number; use a 10-digit US number or full `+1...` E.164 format.
 - **Email send fails even though dry-run looked fine** — the `email_sender_id` address must be a
   verified sender on a domain provisioned in the ACS resource's Email channel; a connection string
   alone isn't enough if Email hasn't been set up on that resource.
