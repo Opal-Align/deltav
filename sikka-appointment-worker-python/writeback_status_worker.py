@@ -10,7 +10,6 @@ trace_appt_writeback_requests accordingly, matched by writeback_status_id.
 import json
 import logging
 import os
-import re
 import sys
 import time
 from base64 import b64decode
@@ -26,7 +25,11 @@ except ImportError:
 
 import pyodbc
 
-from common import GracefulShutdown, connect_queue, connect_db, trigger_appointment_after_patient_created
+import notification
+from common import (
+    GracefulShutdown, connect_queue, connect_db, trigger_appointment_after_patient_created,
+    classify_writeback_event, EVENT_CANCELLED,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -198,11 +201,15 @@ class WritebackStatusWorker:
 
         if status.lower() == 'success':
             appointment_sr_no = item.get('appointment_sr_no') or None
-            new_status = 'CANCELLED' if self._is_cancellation_writeback(item) else 'SCHEDULED'
-            return self._execute_update(
+            event = classify_writeback_event(item)
+            new_status = 'CANCELLED' if event == EVENT_CANCELLED else 'SCHEDULED'
+            updated = self._execute_update(
                 self.UPDATE_SUCCESS_SQL,
                 (new_status, appointment_sr_no, message, updated_dt, writeback_status_id)
             )
+            if updated:
+                notification.notify(self.client_id, self.db_connection, writeback_status_id, event)
+            return updated
 
         result_message = (item.get('result') or '').lower()
         if 'appointment already scheduled' in result_message:
@@ -216,16 +223,6 @@ class WritebackStatusWorker:
 
         logger.error(f"[{self.client_id}] Writeback failed for writeback_status_id {writeback_status_id}: {item}")
         return self._execute_update(self.UPDATE_FAILED_SQL, ('FAILED', message, updated_dt, writeback_status_id))
-
-    def _is_cancellation_writeback(self, item: dict) -> bool:
-        """A successful writeback represents a cancellation when it was a PUT whose
-        payload_body set appointment_status to 'broken', e.g.
-        'op=replace,path=/appointment_status,value=broken,practice_id=1'."""
-        if (item.get('method') or '').strip().upper() != 'PUT':
-            return False
-
-        payload_body = item.get('payload_body') or ''
-        return bool(re.search(r'value\s*=\s*broken\b', str(payload_body), re.IGNORECASE))
 
     def _trigger_appointment(self, writeback_status_id, patient_id):
         """Resume the appointment booking that was deferred pending this patient's creation."""

@@ -21,6 +21,26 @@ logger = logging.getLogger(__name__)
 RESOURCE_TYPE_PATIENTS = 'patients'
 RESOURCE_TYPE_APPOINTMENTS = 'appointments'
 
+EVENT_SCHEDULED = 'scheduled'
+EVENT_RESCHEDULED = 'rescheduled'
+EVENT_CANCELLED = 'cancelled'
+
+
+def classify_writeback_event(item: dict) -> str:
+    """Classify a resolved appointment writeback_status item as a new schedule, a reschedule,
+    or a cancellation, based on the original request's method/payload_body that Sikka echoes
+    back - e.g. a PUT whose payload_body sets appointment_status to 'broken' is a cancellation,
+    any other PUT is a reschedule, and anything else (a POST) is a new schedule."""
+    method = (item.get('method') or '').strip().upper()
+    if method != 'PUT':
+        return EVENT_SCHEDULED
+
+    payload_body = item.get('payload_body') or ''
+    if re.search(r'value\s*=\s*broken\b', str(payload_body), re.IGNORECASE):
+        return EVENT_CANCELLED
+
+    return EVENT_RESCHEDULED
+
 
 class GracefulShutdown:
     """Handle graceful shutdown on SIGTERM/SIGINT."""

@@ -5,12 +5,14 @@ Usage:
     python send_sms.py --csv patients.csv
     python send_sms.py --csv patients.csv --dry-run
     python send_sms.py --csv patients.csv --batch-size 10 --batch-pause-seconds 10
+    python send_sms.py --csv patients.csv --sms-from +15551234567
 
 CSV must have a header row with columns: first_name, last_name, phone_number, practice_id, client_id
 (column names are matched case-insensitively). The recipient (to) number comes from phone_number.
 practice_id/client_id are looked up against DB_Metadata.dbo.Metadata_ClientPractice to resolve the
 sending practice for each row, and the sender (from) number comes from that practice's
-collect_phone_number column.
+collect_phone_number column — unless --sms-from is given, in which case it takes precedence over
+collect_phone_number for every row.
 
 Every outcome (success or failure) is appended to --log-file (default: sent_log.csv). On the next
 run, any (practice_id, phone_number) already logged as 'success' is skipped automatically so the
@@ -131,8 +133,12 @@ def load_recipients(csv_path: str) -> list:
         return recipients
 
 
-def resolve_practice(recipient: Recipient, practice_map: dict) -> Optional[dict]:
-    """Look up and validate the practice for a recipient. Returns None if it can't be resolved."""
+def resolve_practice(recipient: Recipient, practice_map: dict, from_override: Optional[str] = None) -> Optional[dict]:
+    """Look up and validate the practice for a recipient. Returns None if it can't be resolved.
+
+    If from_override is given (e.g. via --sms-from), it takes precedence over the practice's
+    collect_phone_number for the sending number.
+    """
     practice = practice_map.get(recipient.practice_id)
     if not practice:
         logger.error(f"No Metadata_ClientPractice row for practice_id={recipient.practice_id} "
@@ -149,11 +155,14 @@ def resolve_practice(recipient: Recipient, practice_map: dict) -> Optional[dict]
         logger.warning(f"practice_id={recipient.practice_id} is not active, skipping ({recipient.phone_number})")
         return None
 
-    from_number = normalize_phone_number((practice.get('collect_phone_number') or '').strip())
-    if not from_number:
-        logger.error(f"practice_id={recipient.practice_id} has no usable collect_phone_number, "
-                     f"skipping ({recipient.phone_number})")
-        return None
+    if from_override:
+        from_number = from_override
+    else:
+        from_number = normalize_phone_number((practice.get('collect_phone_number') or '').strip())
+        if not from_number:
+            logger.error(f"practice_id={recipient.practice_id} has no usable collect_phone_number, "
+                         f"skipping ({recipient.phone_number})")
+            return None
     practice['collect_phone_number'] = from_number
 
     return practice
@@ -242,9 +251,18 @@ def main():
                               f'(default: {DEFAULT_SENT_LOG_PATH})')
     parser.add_argument('--resend', action='store_true',
                          help='Ignore --log-file and resend to everyone in the CSV')
+    parser.add_argument('--sms-from', dest='sms_from', default=None,
+                         help='Override the sending number for every message, taking precedence over '
+                              "each practice's collect_phone_number")
     args = parser.parse_args()
 
     load_dotenv()
+
+    sms_from_override = None
+    if args.sms_from:
+        sms_from_override = normalize_phone_number(args.sms_from)
+        if not sms_from_override:
+            raise ValueError(f"--sms-from value '{args.sms_from}' could not be normalized to E.164")
 
     recipients = load_recipients(args.csv)
     if not recipients:
@@ -261,7 +279,7 @@ def main():
 
     resolved = []
     for recipient in recipients:
-        practice = resolve_practice(recipient, practice_map)
+        practice = resolve_practice(recipient, practice_map, sms_from_override)
         if practice:
             resolved.append((recipient, practice))
 
