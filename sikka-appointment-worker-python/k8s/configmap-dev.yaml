@@ -12,4 +12,6 @@ data:
   SIKKA_PATIENT_API_URL: "https://api.sikkasoft.com/v4/patient"
   SIKKA_HTTP_TIMEOUT: "15"
   SIKKA_MAX_DEQUEUE_COUNT: "2"
+  SMS_NOTIFICATIONS_ENABLED: "false"
+  SIKKA_NOTIFICATION_API_URL: ""
   AZURE_STORAGE_ACCOUNT_URL: "https://deltav.queue.core.windows.net"
