@@ -28,7 +28,7 @@ COPY --from=builder /app/deps /app/deps
 ENV PYTHONPATH=/app/deps
 
 # Copy application
-COPY common.py worker.py writeback_status_worker.py writeback_status_reconciler.py .
+COPY common.py worker.py writeback_status_worker.py writeback_status_reconciler.py notification.py .
 
 # Create non-root user
 RUN groupadd -g 1001 appgroup && \
