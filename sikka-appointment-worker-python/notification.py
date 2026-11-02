@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Appointment-status notifications. Prepares the SMS message/payload here and POSTs it to an
-external notification API (SIKKA_NOTIFICATION_API_URL) which actually sends it.
+external notification API (SMS_NOTIFICATION_API_URL) which actually sends it.
 
 Disabled by default - set SMS_NOTIFICATIONS_ENABLED=true to turn on.
 """
@@ -36,19 +36,30 @@ MESSAGE_TEMPLATES = {
     ),
 }
 
-# Identifies this caller to the notification API.
-NOTIFICATION_SOURCE = 'SCHEDULER_REQUEST'
+# Identifies this caller to the notification API. Must match one of the notification
+# API's communication-line values (COLLECT, PRODUCE, SCHEDULE, SCHEDULE_REQUEST,
+# MISSING_CONTACTS).
+NOTIFICATION_SOURCE = 'SCHEDULE_REQUEST'
 
-# TODO: Metadata_ClientPractice doesn't yet have a dedicated patient-facing contact number -
-# point this at that column once it's added (collect_phone_number is the *sending* number).
-PRACTICE_CONTACT_PHONE_COLUMN = 'patient_contact_phone'
+# Identifies this job as the sender on outbound sms_messages.
+SENT_BY = 'sikka appointment job'
+
+# The practice's patient-facing contact number (collect_phone_number is the *sending* number).
+PRACTICE_CONTACT_PHONE_COLUMN = 'contact_phone_number'
 
 _SELECT_NOTIFICATION_CONTEXT_SQL = f"""
-    SELECT r.patient_first_name, r.cell_phone, r.patient_phone, w.[date], w.[time],
-           w.patient_id, w.practice_id,
+    SELECT r.patient_first_name,
+           COALESCE(NULLIF(r.cell_phone, ''),
+                    CASE WHEN pt.is_active = 1 THEN NULLIF(pt.guarantor_phone_number, '') END,
+                    CASE WHEN pt.is_active = 1 THEN pt.cell END) AS cell_phone,
+           COALESCE(NULLIF(r.patient_phone, ''),
+                    CASE WHEN pt.is_active = 1 THEN NULLIF(pt.guarantor_phone_number, '') END,
+                    CASE WHEN pt.is_active = 1 THEN pt.cell END) AS patient_phone,
+           w.[date], w.[time], w.patient_id, w.practice_id,
            p.PracticeName, p.{PRACTICE_CONTACT_PHONE_COLUMN}, p.collect_phone_number
     FROM trace_appt_writeback_requests w
-    JOIN trace_appt_requests r ON r.id = w.trace_appt_req_id
+    LEFT JOIN trace_appt_requests r ON r.id = w.trace_appt_req_id
+    LEFT JOIN patient pt ON pt.patient_id = w.patient_id AND pt.is_active = 1 
     JOIN DB_Metadata.dbo.Metadata_ClientPractice p ON p.PracticeID = w.practice_id
     WHERE w.writeback_status_id = ?
 """
@@ -110,24 +121,26 @@ def _send(client_id, db_connection, writeback_status_id, event):
         contact_phone_number=contact_phone_number or collect_phone_number or '',
     )
 
-    api_url = os.getenv('SIKKA_NOTIFICATION_API_URL')
+    api_url = os.getenv('SMS_NOTIFICATION_API_URL')
     if not api_url:
-        logger.error(f"[{client_id}] SIKKA_NOTIFICATION_API_URL not set, "
+        logger.error(f"[{client_id}] SMS_NOTIFICATION_API_URL not set, "
                       f"cannot send {event} notification")
         return
 
     payload = {
-        'to_number': to_number,
-        'from_number': from_number,
+        'taskId': str(writeback_status_id),
+        'patientId': str(patient_id) if patient_id is not None else '',
+        'sentBy': SENT_BY,
+        'sourceType': NOTIFICATION_SOURCE,
+        'queueType': NOTIFICATION_SOURCE,
+        'fromNumber': from_number,
+        'toNumber': to_number,
         'message': message,
-        'patient_id': str(patient_id) if patient_id is not None else '',
-        'practice_id': str(practice_id) if practice_id is not None else '',
-        'client_id': client_id,
-        'source': NOTIFICATION_SOURCE,
+        'practiceId': practice_id,
     }
     headers = {
         'Content-Type': 'application/json',
-        'Practice-Id': str(practice_id) if practice_id is not None else '',
+        'X-Practice-Id': str(practice_id) if practice_id is not None else '',
     }
 
     _post_with_retry(client_id, api_url, payload, headers, event, writeback_status_id)

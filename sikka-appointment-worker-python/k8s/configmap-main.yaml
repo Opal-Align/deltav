@@ -13,5 +13,5 @@ data:
   SIKKA_HTTP_TIMEOUT: "15"
   SIKKA_MAX_DEQUEUE_COUNT: "2"
   SMS_NOTIFICATIONS_ENABLED: "false"
-  SIKKA_NOTIFICATION_API_URL: ""
+  SMS_NOTIFICATION_API_URL: "http://opal-align-dashboard-common:8003/common/api/internal/send-sms"
   AZURE_STORAGE_ACCOUNT_URL: "https://traceappprod.queue.core.windows.net"
