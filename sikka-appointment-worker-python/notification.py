@@ -44,7 +44,7 @@ NOTIFICATION_SOURCE = 'SCHEDULE_REQUEST'
 # Identifies this job as the sender on outbound sms_messages.
 SENT_BY = 'sikka appointment job'
 
-# The practice's patient-facing contact number (collect_phone_number is the *sending* number).
+# The practice's patient-facing contact number (appointment_phone_number is the *sending* number).
 PRACTICE_CONTACT_PHONE_COLUMN = 'contact_phone_number'
 
 _SELECT_NOTIFICATION_CONTEXT_SQL = f"""
@@ -56,7 +56,7 @@ _SELECT_NOTIFICATION_CONTEXT_SQL = f"""
                     CASE WHEN pt.is_active = 1 THEN NULLIF(pt.guarantor_phone_number, '') END,
                     CASE WHEN pt.is_active = 1 THEN pt.cell END) AS patient_phone,
            w.[date], w.[time], w.patient_id, w.practice_id,
-           p.PracticeName, p.{PRACTICE_CONTACT_PHONE_COLUMN}, p.collect_phone_number
+           p.PracticeName, p.{PRACTICE_CONTACT_PHONE_COLUMN}, p.appointment_phone_number
     FROM trace_appt_writeback_requests w
     LEFT JOIN trace_appt_requests r ON r.id = w.trace_appt_req_id
     LEFT JOIN patient pt ON pt.patient_id = w.patient_id AND pt.is_active = 1 
@@ -99,7 +99,7 @@ def _send(client_id, db_connection, writeback_status_id, event):
         return
 
     (first_name, cell_phone, patient_phone, appt_date, appt_time, patient_id, practice_id,
-     practice_name, contact_phone_number, collect_phone_number) = row
+     practice_name, contact_phone_number, appointment_phone_number) = row
 
     to_number = _normalize_phone(cell_phone) or _normalize_phone(patient_phone)
     if not to_number:
@@ -107,7 +107,7 @@ def _send(client_id, db_connection, writeback_status_id, event):
                         f"{writeback_status_id}, skipping notification")
         return
 
-    from_number = _normalize_phone(collect_phone_number)
+    from_number = _normalize_phone(appointment_phone_number)
     if not from_number:
         logger.warning(f"[{client_id}] No usable sending number for writeback_status_id "
                         f"{writeback_status_id}, skipping notification")
