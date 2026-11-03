@@ -162,7 +162,8 @@ def _post_with_retry(client_id, url, payload, headers, event, writeback_status_i
                 return
 
             logger.warning(f"[{client_id}] {event} notification transient error for writeback_status_id "
-                            f"{writeback_status_id} ({response.status_code}), attempt {attempt}/{MAX_RETRIES}")
+                            f"{writeback_status_id} ({response.status_code}), attempt {attempt}/{MAX_RETRIES}: "
+                            f"{response.text}")
         except requests.RequestException as e:
             logger.warning(f"[{client_id}] {event} notification attempt {attempt}/{MAX_RETRIES} failed "
                             f"for writeback_status_id {writeback_status_id}: {e}")
