@@ -176,19 +176,18 @@ def _post_with_retry(client_id, url, payload, headers, event, writeback_status_i
 
 
 def _normalize_phone(raw) -> str:
-    """Best-effort conversion to E.164. Returns '' if the number can't be normalized."""
+    """Best-effort conversion to E.164 for a 10-digit NANP number. Returns '' if the number
+    can't be normalized, or isn't a plausible NANP number (area code can't start with 0/1) -
+    Azure Communication Services rejects those outright, so better to skip than retry a
+    guaranteed-invalid send."""
     if not raw:
         return ''
-    digits = ''.join(ch for ch in str(raw) if ch.isdigit() or ch == '+')
-    if not digits:
-        return ''
-    if digits.startswith('+'):
-        return digits
-    if len(digits) == 10:
-        return f'+1{digits}'
+    digits = ''.join(ch for ch in str(raw) if ch.isdigit())
     if len(digits) == 11 and digits.startswith('1'):
-        return f'+{digits}'
-    return ''
+        digits = digits[1:]
+    if len(digits) != 10 or digits[0] in ('0', '1'):
+        return ''
+    return f'+1{digits}'
 
 
 def _format_date(value) -> str:
