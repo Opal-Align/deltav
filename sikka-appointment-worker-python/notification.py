@@ -118,7 +118,7 @@ def _send(client_id, db_connection, writeback_status_id, event):
         practice_name=practice_name or '',
         appointment_date=_format_date(appt_date),
         appointment_time=_format_time(appt_time),
-        contact_phone_number=contact_phone_number or collect_phone_number or '',
+        contact_phone_number=contact_phone_number or appointment_phone_number or '',
     )
 
     api_url = os.getenv('SMS_NOTIFICATION_API_URL')
@@ -153,7 +153,7 @@ def _post_with_retry(client_id, url, payload, headers, event, writeback_status_i
 
             if response.status_code < 300:
                 logger.info(f"[{client_id}] Sent {event} notification for writeback_status_id "
-                            f"{writeback_status_id} to {payload['to_number']}")
+                            f"{writeback_status_id} to {payload['toNumber']}")
                 return
 
             if response.status_code < 500 and response.status_code != 429:
