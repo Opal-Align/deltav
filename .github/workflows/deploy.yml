@@ -1,7 +1,6 @@
 name: Build & Deploy DeltaV Azure Function
 
 permissions:
-  id-token: write
   contents: read
 
 on:
@@ -69,7 +68,7 @@ jobs:
             --batch-mode --no-transfer-progress
 
       - name: Azure Login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
           tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}

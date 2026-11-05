@@ -18,6 +18,7 @@ on:
         type: choice
         options:
           - dev
+          - demo
           - main
       image_tag:
         description: 'Image tag to build and push'

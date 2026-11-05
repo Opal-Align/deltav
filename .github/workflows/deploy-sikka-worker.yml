@@ -26,6 +26,7 @@ on:
         type: choice
         options:
           - dev
+          - demo
           - main
       process:
         description: 'Which process to deploy'

@@ -22,6 +22,7 @@ on:
         type: choice
         options:
           - dev
+          - demo
           - main
       client_id:
         description: 'Client ID for the queue worker'

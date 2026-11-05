@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sikka-appointment-worker-config
+data:
+  POLL_INTERVAL: "1.0"
+  BATCH_SIZE: "16"
+  VISIBILITY_TIMEOUT: "30"
+  MAX_RETRIES: "3"
+  RETRY_DELAY: "1.0"
+  SIKKA_API_URL: "https://api.sikkasoft.com/v4/appointment"
+  SIKKA_PATIENT_API_URL: "https://api.sikkasoft.com/v4/patient"
+  SIKKA_HTTP_TIMEOUT: "15"
+  SIKKA_MAX_DEQUEUE_COUNT: "2"
+  SMS_NOTIFICATIONS_ENABLED: "true"
+  SMS_NOTIFICATION_API_URL: "http://opal-align-dashboard-common:8003/common/api/internal/send-sms"
+  AZURE_STORAGE_ACCOUNT_URL: "https://deltav.queue.core.windows.net"
