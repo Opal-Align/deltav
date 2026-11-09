@@ -77,7 +77,7 @@ public class PracticeMetadataLoader {
      * Check if a key is valid (8 characters and exists in metadata).
      */
     public static boolean isValidKey(String base64Key, Logger logger) {
-        if (base64Key == null || base64Key.length() < 8 || base64Key.length() > 14) return false;
+        if (base64Key == null || base64Key.length() <= 8 || base64Key.length() > 14) return false;
         return getMetadataMap(logger).containsKey(base64Key);
     }
 
@@ -102,11 +102,13 @@ public class PracticeMetadataLoader {
             TableServiceClient tableServiceClient;
             if (storageAccountName != null && !storageAccountName.isBlank()) {
                 String endpoint = "https://" + storageAccountName + ".table.core.windows.net";
+                logger.info("PracticeMetadataLoader: loading from storage account=" + storageAccountName + ", table=" + tableName);
                 tableServiceClient = new TableServiceClientBuilder()
                         .endpoint(endpoint)
                         .credential(new DefaultAzureCredentialBuilder().build())
                         .buildClient();
             } else if (connStr != null && !connStr.isBlank()) {
+                logger.info("PracticeMetadataLoader: loading via connection string, table=" + tableName);
                 tableServiceClient = new TableServiceClientBuilder()
                         .connectionString(connStr)
                         .buildClient();
