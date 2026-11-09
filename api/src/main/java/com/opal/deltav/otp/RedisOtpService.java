@@ -69,7 +69,7 @@ public final class RedisOtpService {
             String otp = generateOtp();
             String secret = getOtpHashSecret();
             String hashedOtp = OtpHashUtil.hashOtp(session.sessionId, session.phoneE164, otp, secret);
-
+            logger.info("Session Id : " + session.sessionId + " Hashed Otp : " + hashedOtp);
             jedis.setex(otpKey(session.sessionId), OTP_TTL_SECONDS, hashedOtp);
             jedis.del(attemptsKey(session.sessionId));
 
