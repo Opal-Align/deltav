@@ -14,4 +14,4 @@ data:
   SIKKA_MAX_DEQUEUE_COUNT: "2"
   SMS_NOTIFICATIONS_ENABLED: "true"
   SMS_NOTIFICATION_API_URL: "http://opal-align-dashboard-common:8003/common/api/internal/send-sms"
-  AZURE_STORAGE_ACCOUNT_URL: "https://deltav.queue.core.windows.net"
+  AZURE_STORAGE_ACCOUNT_URL: "https://traceappdemosa.queue.core.windows.net"
