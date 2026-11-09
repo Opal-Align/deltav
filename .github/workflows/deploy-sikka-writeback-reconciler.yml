@@ -2,7 +2,7 @@ name: Deploy Sikka Writeback Status Reconciler
 
 run-name: >-
   Deploy Sikka Writeback Status Reconciler · ${{ github.event.inputs.environment }} ·
-  ${{ github.event.inputs.client_id }}
+  ${{ github.ref_name }} · ${{ github.event.inputs.client_id }}
 
 permissions:
   id-token: write

@@ -2,7 +2,8 @@ name: Deploy Sikka Appointment Worker
 
 run-name: >-
   Deploy Sikka Worker · ${{ github.event.inputs.process }} ·
-  ${{ github.event.inputs.environment }} · ${{ github.event.inputs.client_id }}
+  ${{ github.event.inputs.environment }} · ${{ github.ref_name }} ·
+  ${{ github.event.inputs.client_id }}
 
 permissions:
   id-token: write

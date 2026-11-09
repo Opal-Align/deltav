@@ -2,7 +2,7 @@ name: Build & Push Sikka Appointment Worker
 
 run-name: >-
   Build Sikka Worker · ${{ github.event.inputs.environment }} ·
-  ${{ github.event.inputs.image_tag }}
+  ${{ github.ref_name }} · ${{ github.event.inputs.image_tag }}
 
 permissions:
   id-token: write
