@@ -1,5 +1,7 @@
 package com.opal.deltav.otp;
 
+import com.azure.core.credential.AccessToken;
+import com.azure.core.credential.TokenCredential;
 import com.azure.core.credential.TokenRequestContext;
 import com.azure.identity.DefaultAzureCredentialBuilder;
 import redis.clients.jedis.DefaultJedisClientConfig;
@@ -8,6 +10,8 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.net.URI;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.logging.Logger;
 
 /**
@@ -21,22 +25,39 @@ import java.util.logging.Logger;
 final class RedisClients {
 
     private static final String REDIS_SCOPE = "https://redis.azure.com/.default";
+    private static final Duration TOKEN_REFRESH_MARGIN = Duration.ofMinutes(5);
+
+    private static final TokenCredential AZURE_CREDENTIAL = new DefaultAzureCredentialBuilder().build();
 
     private static volatile JedisPool pool;
+    // Null when the pool was built from a connection string (no token to expire).
+    private static volatile OffsetDateTime tokenExpiresAt;
     private static final Object poolLock = new Object();
 
     private RedisClients() {
     }
 
     static JedisPool getPool(Logger logger) {
-        if (pool == null) {
+        if (needsRefresh()) {
             synchronized (poolLock) {
-                if (pool == null) {
+                if (needsRefresh()) {
+                    JedisPool previous = pool;
                     pool = createPool(logger);
+                    if (previous != null) {
+                        previous.close();
+                    }
                 }
             }
         }
         return pool;
+    }
+
+    private static boolean needsRefresh() {
+        if (pool == null) {
+            return true;
+        }
+        OffsetDateTime expiresAt = tokenExpiresAt;
+        return expiresAt != null && OffsetDateTime.now().isAfter(expiresAt.minus(TOKEN_REFRESH_MARGIN));
     }
 
     private static JedisPool createPool(Logger logger) {
@@ -89,17 +110,17 @@ final class RedisClients {
         }
 
         // Get access token using managed identity
-        String accessToken = new DefaultAzureCredentialBuilder()
-                .build()
+        AccessToken accessToken = AZURE_CREDENTIAL
                 .getToken(new TokenRequestContext().addScopes(REDIS_SCOPE))
-                .block()
-                .getToken();
+                .block();
+        tokenExpiresAt = accessToken.getExpiresAt();
 
-        logger.info("Redis connection config - host: " + redisHost + ", port: " + redisPort + ", ssl: " + useSsl + ", user: " + redisUser);
+        logger.info("Redis connection config - host: " + redisHost + ", port: " + redisPort + ", ssl: " + useSsl
+                + ", user: " + redisUser + ", tokenExpiresAt: " + tokenExpiresAt);
 
         DefaultJedisClientConfig clientConfig = DefaultJedisClientConfig.builder()
                 .user(redisUser)
-                .password(accessToken)
+                .password(accessToken.getToken())
                 .ssl(useSsl)
                 .build();
 
