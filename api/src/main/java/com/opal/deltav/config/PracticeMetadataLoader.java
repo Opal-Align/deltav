@@ -55,9 +55,9 @@ public class PracticeMetadataLoader {
      */
     public static Map<String, PracticeMetadata> getMetadataMap(Logger logger) {
         logger.info("PracticeMetadataLoader: getting metadata map...");
-        if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
+        if (metadataMap == null || metadataMap.isEmpty() || Instant.now().isAfter(cacheExpiry)) {
             synchronized (lock) {
-                if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
+                if (metadataMap == null || metadataMap.isEmpty() || Instant.now().isAfter(cacheExpiry)) {
                     metadataMap = loadFromTable(logger);
                     cacheExpiry = Instant.now().plusMillis(CACHE_TTL_MS);
                 }
