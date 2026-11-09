@@ -54,7 +54,7 @@ public class PracticeMetadataLoader {
      * Get the metadata map, loading from Azure Table Storage if cache is expired.
      */
     public static Map<String, PracticeMetadata> getMetadataMap(Logger logger) {
-        metadataMap.forEach(System.out::printf);
+        logger.info("PracticeMetadataLoader: getting metadata map...");
         if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
             synchronized (lock) {
                 if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
@@ -63,6 +63,7 @@ public class PracticeMetadataLoader {
                 }
             }
         }
+        logger.info("PracticeMetadataLoader: getting metadata map complete : " + metadataMap);
         return metadataMap;
     }
 
