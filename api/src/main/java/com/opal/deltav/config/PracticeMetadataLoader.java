@@ -54,6 +54,7 @@ public class PracticeMetadataLoader {
      * Get the metadata map, loading from Azure Table Storage if cache is expired.
      */
     public static Map<String, PracticeMetadata> getMetadataMap(Logger logger) {
+        metadataMap.forEach(System.out::printf);
         if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
             synchronized (lock) {
                 if (metadataMap == null || Instant.now().isAfter(cacheExpiry)) {
@@ -77,7 +78,10 @@ public class PracticeMetadataLoader {
      * Check if a key is valid (8 characters and exists in metadata).
      */
     public static boolean isValidKey(String base64Key, Logger logger) {
-        if (base64Key == null || base64Key.length() <= 7 || base64Key.length() > 14) return false;
+        if (base64Key == null || base64Key.length() <= 7 || base64Key.length() > 14) {
+            logger.info("PracticeMetadataLoader: Invalid key length: " + base64Key);
+            return false;
+        }
         return getMetadataMap(logger).containsKey(base64Key);
     }
 
