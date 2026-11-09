@@ -1,4 +1,5 @@
 name: Build & Deploy DeltaV Azure Function
+run-name: Build & Deploy DeltaV Azure Function (${{ github.event.inputs.environment }} @ ${{ github.ref_name }})
 
 permissions:
   contents: read
