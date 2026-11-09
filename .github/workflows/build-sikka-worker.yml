@@ -5,7 +5,6 @@ run-name: >-
   ${{ github.ref_name }} · ${{ github.event.inputs.image_tag }}
 
 permissions:
-  id-token: write
   contents: read
 
 on:

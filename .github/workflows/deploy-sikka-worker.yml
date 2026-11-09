@@ -6,7 +6,6 @@ run-name: >-
   ${{ github.event.inputs.client_id }}
 
 permissions:
-  id-token: write
   contents: read
 
 on:
@@ -94,10 +93,7 @@ jobs:
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ vars.AKS_DEPLOYMENT_CLIENT_ID }}
-          tenant-id: ${{ vars.AKS_DEPLOYMENT_TENANT_ID }}
-          client-secret: ${{ secrets.AKS_DEPLOYMENT_CLIENT_SECRET }}
-          subscription-id: ${{ vars.AKS_DEPLOYMENT_AZURE_SUBSCRIPTION }}
+          creds: ${{ vars.AZURE_CREDENTIALS }}
 
       - name: Set AKS Context
         uses: azure/aks-set-context@v4
