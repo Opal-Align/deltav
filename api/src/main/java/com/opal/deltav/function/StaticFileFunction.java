@@ -133,6 +133,24 @@ public class StaticFileFunction {
         }
     }
 
+    private static final java.util.regex.Pattern SAFE_LOGO_FILE =
+            java.util.regex.Pattern.compile("^[A-Za-z0-9_-]+\\.(png|jpg|jpeg|svg|webp)$");
+
+    /**
+     * Returns the bundled logo filename from the FORCE_BRAND_LOGO app setting, or null if unset/invalid.
+     * Only plain filenames are accepted because the value is injected into an HTML attribute.
+     */
+    private static String resolveForcedLogo(Logger logger) {
+        String value = System.getenv("FORCE_BRAND_LOGO");
+        if (value == null || value.isBlank()) return null;
+        value = value.trim();
+        if (!SAFE_LOGO_FILE.matcher(value).matches()) {
+            logger.warning("Ignoring invalid FORCE_BRAND_LOGO value: " + value);
+            return null;
+        }
+        return value;
+    }
+
     private static String getRoutePrefix() {
         // Mirrors default in host.json; if changed, update here accordingly.
         // In this project host.json sets routePrefix to "api".
@@ -210,6 +228,12 @@ public class StaticFileFunction {
             String logoUrl = (metadata.getLogoName() != null && !metadata.getLogoName().isBlank())
                     ? "/api/logo/" + metadata.getId() + ".png"
                     : "logo.png";
+
+            // Optional override (e.g. demo env): show one fixed bundled logo for every practice
+            String forcedLogo = resolveForcedLogo(logger);
+            if (forcedLogo != null) {
+                logoUrl = forcedLogo;
+            }
 
             html = html.replace("${practice_name}", practiceName);
             html = html.replace("${practice_logo_url}", logoUrl);
