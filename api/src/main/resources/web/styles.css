@@ -89,8 +89,8 @@ body {
   max-width: 100%;
   display: block;
   background: #fff;
-  padding: 12px 20px;
-  border-radius: 12px;
+  padding: 4px;
+  border-radius: 6px;
 }
 
 .brand-headline {
